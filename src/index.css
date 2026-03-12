@@ -4,8 +4,8 @@
   --paper:   #F7F5F0;
   --ledger:  #FFFEF9;
   --rule:    #E8E4DC;
-  --debit:   #8B1A1A;
-  --credit:  #1A4D2E;
+  --withdraw:   #8B1A1A;
+  --deposit:  #1A4D2E;
   --accent:  #C8960C;
   --muted:   #6B6560;
   --blue:    #1A3C5E;
@@ -57,7 +57,7 @@ body {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 4px;
-  background: linear-gradient(90deg, var(--debit), var(--accent), var(--credit));
+  background: linear-gradient(90deg, var(--withdraw), var(--accent), var(--deposit));
 }
 .auth-logo {
   font-family: var(--font-serif);
@@ -136,10 +136,10 @@ body {
 /* ── Alert / error ─────────────────────────────────────────── */
 .error-msg {
   background: #FFF5F5;
-  border-left: 3px solid var(--debit);
+  border-left: 3px solid var(--withdraw);
   padding: 0.7rem 1rem;
   font-size: 0.82rem;
-  color: var(--debit);
+  color: var(--withdraw);
   margin-top: 1rem;
   font-family: var(--font-mono);
 }
@@ -254,8 +254,8 @@ body {
   font-weight: 600;
   letter-spacing: -0.02em;
 }
-.stat-value-debit   { color: var(--debit); }
-.stat-value-credit  { color: var(--credit); }
+.stat-value-withdraw   { color: var(--withdraw); }
+.stat-value-deposit  { color: var(--deposit); }
 .stat-value-neutral { color: var(--ink); }
 
 /* ── Main / ledger ─────────────────────────────────────────── */
@@ -306,8 +306,8 @@ td { padding: 0.6rem 0.85rem; vertical-align: middle; }
 .cell-desc    { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell-cheque  { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
 .cell-amt     { font-family: var(--font-mono); font-size: 0.88rem; font-weight: 500; white-space: nowrap; text-align: right; }
-.cell-amt-debit  { color: var(--debit); }
-.cell-amt-credit { color: var(--credit); }
+.cell-amt-withdraw  { color: var(--withdraw); }
+.cell-amt-deposit { color: var(--deposit); }
 .cell-balance { font-family: var(--font-mono); font-size: 0.82rem; text-align: right; white-space: nowrap; }
 .cell-channel { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); }
 .cell-raygan         { font-size: 0.84rem; color: var(--blue); font-style: italic; }
@@ -383,7 +383,7 @@ td { padding: 0.6rem 0.85rem; vertical-align: middle; }
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--debit), var(--accent), var(--credit));
+  background: linear-gradient(90deg, var(--withdraw), var(--accent), var(--deposit));
 }
 @keyframes slideIn { from { opacity: 0; transform: translateY(-14px); } }
 .modal-header {
@@ -457,8 +457,8 @@ td { padding: 0.6rem 0.85rem; vertical-align: middle; }
   animation: toastIn 0.18s ease;
   max-width: 300px;
 }
-.toast-success { border-left-color: var(--credit); }
-.toast-error   { border-left-color: var(--debit); }
+.toast-success { border-left-color: var(--deposit); }
+.toast-error   { border-left-color: var(--withdraw); }
 @keyframes toastIn { from { opacity: 0; transform: translateX(16px); } }
 
 /* ── Responsive ────────────────────────────────────────────── */

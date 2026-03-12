@@ -17,9 +17,9 @@ const NUMERIC_COLS = ['withdraw', 'deposit', 'balance']
 const PREVIEW_COLS = ['tx_datetime', 'description', 'withdraw', 'deposit', 'balance', 'channel']
 
 const ROLE_LABELS = {
-  withdrawal: 'หักบัญชี',
-  income: 'เข้าบัญชี',
-  boss: 'ผู้บริหาร · อ่านอย่างเดียว',
+  withdrawal: 'หักบัญชี · แก้ไขรายการเท่านั้น',
+  income:     'เข้าบัญชี · แก้ไขรายการเท่านั้น',
+  boss:       'ผู้บริหาร',
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -114,8 +114,8 @@ function parseBankCSV(arrayBuffer) {
   if (rows.length === 0) throw new Error('ไม่พบรายการธุรกรรมในไฟล์')
 
   return rows.map(r => {
-    const debit  = parseFloat(r['หักบัญชี']?.replace(/,/g, ''))  || null
-    const credit = parseFloat(r['เข้าบัญชี']?.replace(/,/g, '')) || null
+    const withdraw  = parseFloat(r['หักบัญชี']?.replace(/,/g, ''))  || null
+    const deposit = parseFloat(r['เข้าบัญชี']?.replace(/,/g, '')) || null
     const balance = parseFloat(r['ยอดคงเหลือ']?.replace(/,/g, '')) || null
     const txDatetime = r['วันที่ทำรายการ']
 
@@ -124,12 +124,11 @@ function parseBankCSV(arrayBuffer) {
       effective_date: r['วันที่มีผล']        || null,
       description:    r['คำอธิบาย']          || null,
       cheque_number:  r['เลขที่เช็ค']        || null,
-      debit:          debit,
-      credit:         credit,
+      withdraw:          withdraw,
+      deposit:         deposit,
       balance:        balance,
       channel:        r['ช่องทางทำรายการ']   || null,
-      type:           debit != null ? 'withdrawal' : 'income',
-      tx_unique_key:  `${txDatetime}|${balance}`,
+      type:           withdraw != null ? 'withdrawal' : 'income',
     }
   })
 }
@@ -261,8 +260,8 @@ function useTransactions(role) {
   // Stats
   const stats = {
     total:   filteredTransactions.length,
-    debits:  filteredTransactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t['withdraw'] ?? 0), 0),
-    credits: filteredTransactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t['deposit'] ?? 0), 0),
+    withdraws:  filteredTransactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t['withdraw'] ?? 0), 0),
+    deposits: filteredTransactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t['deposit'] ?? 0), 0),
   }
 
   return {
@@ -405,8 +404,8 @@ function AuthScreen({ onLogin }) {
 // StatsBar
 // ─────────────────────────────────────────────────────────────
 function StatsBar({ stats, role }) {
-  const net = stats.credits - stats.debits
-  const netColor = net >= 0 ? 'var(--credit)' : 'var(--debit)'
+  const net = stats.deposits - stats.withdraws
+  const netColor = net >= 0 ? 'var(--deposit)' : 'var(--withdraw)'
 
   return (
     <div className="stats-bar">
@@ -420,14 +419,14 @@ function StatsBar({ stats, role }) {
       {role !== 'income' && (
         <div className="stat">
           <div className="stat-label">ยอดหักรวม</div>
-          <div className="stat-value stat-value-debit">{formatBaht(stats.debits)}</div>
+          <div className="stat-value stat-value-withdraw">{formatBaht(stats.withdraws)}</div>
         </div>
       )}
 
       {role !== 'withdrawal' && (
         <div className="stat">
           <div className="stat-label">ยอดเข้ารวม</div>
-          <div className="stat-value stat-value-credit">{formatBaht(stats.credits)}</div>
+          <div className="stat-value stat-value-deposit">{formatBaht(stats.deposits)}</div>
         </div>
       )}
 
@@ -503,11 +502,14 @@ function Toolbar({ filters, channels, role, onFilterChange, onImportClick }) {
         aria-label="ถึงวันที่"
       />
 
-      {/* Boss and accountants can both import */}
-      <div className="toolbar-divider" />
-      <button className="btn btn-ghost btn-sm" onClick={onImportClick}>
-        ↑ นำเข้า CSV
-      </button>
+      {role === 'boss' && (
+        <>
+          <div className="toolbar-divider" />
+          <button className="btn btn-ghost btn-sm" onClick={onImportClick}>
+            ↑ นำเข้า CSV
+          </button>
+        </>
+      )}
     </div>
   )
 }
@@ -614,7 +616,7 @@ function ImportModal({ onClose, onImported }) {
       const chunk = parsedRows.slice(i, i + CHUNK)
       const { error: sbError } = await supabase
         .from('transactions')
-        .upsert(chunk, { onConflict: 'tx_unique_key', ignoreDuplicates: true })
+        .upsert(chunk, { onConflict: 'tx_datetime,balance', ignoreDuplicates: true })
 
       if (sbError) { 
         console.error('Import error:', sbError)
@@ -823,10 +825,10 @@ function TransactionRow({ transaction: tx, canEdit, onEditRaygan }) {
         </span>
       </td>
       <td><span className="cell-cheque">{tx['cheque_number'] ?? ''}</span></td>
-      <td className={`cell-amt ${tx['withdraw'] ? 'cell-amt-debit' : ''}`}>
+      <td className={`cell-amt ${tx['withdraw'] ? 'cell-amt-withdraw' : ''}`}>
         {formatBaht(tx['withdraw'])}
       </td>
-      <td className={`cell-amt ${tx['deposit'] ? 'cell-amt-credit' : ''}`}>
+      <td className={`cell-amt ${tx['deposit'] ? 'cell-amt-deposit' : ''}`}>
         {formatBaht(tx['deposit'])}
       </td>
       <td className="cell-balance">{formatBaht(tx['balance'])}</td>
