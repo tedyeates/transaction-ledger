@@ -13,7 +13,6 @@ const supabase = createClient(
 // Constants
 // ─────────────────────────────────────────────────────────────
 const PAGE_SIZE = 25
-const NUMERIC_COLS = ['withdraw', 'deposit', 'balance']
 const PREVIEW_COLS = ['tx_datetime', 'description', 'withdraw', 'deposit', 'balance', 'channel']
 
 const ROLES ={
@@ -41,17 +40,15 @@ function formatBaht(value) {
   })
 }
 
-/**
- * Convert a Thai Buddhist Era date string "D/M/YYYY HH:MM"
- * to an ISO date string "YYYY-MM-DD" for range comparisons.
- */
-function thaiDateToISO(str) {
-  if (!str) return null
-  const match = str.match(/^(\d+)\/(\d+)\/(\d+)/)
-  if (!match) return null
-  const [, d, m, y] = match
-  const year = parseInt(y) > 2400 ? parseInt(y) - 543 : parseInt(y)
-  return `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+function formatThaiDateTime(isoString) {
+  if (!isoString) return ''
+  const date = new Date(isoString)
+  const d = date.getDate()
+  const m = date.getMonth() + 1
+  const y = date.getFullYear()  // this will be 2569 etc
+  const h = String(date.getHours()).padStart(2, '0')
+  const min = String(date.getMinutes()).padStart(2, '0')
+  return `${d}/${m}/${y} ${h}:${min}`
 }
 
 /**
@@ -172,79 +169,96 @@ function ToastProvider({ children }) {
 // useTransactions — all data fetching and filtering logic
 // ─────────────────────────────────────────────────────────────
 function useTransactions(role) {
-  const [allTransactions, setAllTransactions] = useState([])
+  const [transactions, setTransactions] = useState([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [channels, setChannels] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [filters, setFilters] = useState({ search: '', type: '', channel: '', dateFrom: '', dateTo: '' })
   const [sort, setSort] = useState({ col: 'tx_datetime', dir: 'desc' })
   const [page, setPage] = useState(1)
+  const [fullStats, setFullStats] = useState({ withdraws: 0, deposits: 0 })
   const addToast = useToast()
 
   // Lock type filter for accountants
   useEffect(() => {
-    if (role === 'withdrawal') setFilters(f => ({ ...f, type: 'withdrawal' }))
-    if (role === 'income')     setFilters(f => ({ ...f, type: 'income' }))
+    if (role === ROLES.withdraw) setFilters(f => ({ ...f, type: 'withdrawal' }))
+    if (role === ROLES.income) setFilters(f => ({ ...f, type: 'income' }))
   }, [role])
+
+  // Fetch channels once on mount for the filter dropdown
+  useEffect(() => {
+    supabase
+      .from('transactions')
+      .select('channel')
+      .neq('channel', null)
+      .then(({ data }) => {
+        if (data) setChannels([...new Set(data.map(r => r.channel))].sort())
+      })
+  }, [])
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      let query = supabase
+        .from('transactions')
+        .select('type, withdraw, deposit')
+
+      if (filters.type)     query = query.eq('type', filters.type)
+      if (filters.channel)  query = query.eq('channel', filters.channel)
+      if (filters.dateFrom) query = query.gte('tx_datetime', filters.dateFrom)
+      if (filters.dateTo)   query = query.lte('tx_datetime', filters.dateTo + 'T23:59:59')
+      if (filters.search) {
+        query = query.or(
+          `description.ilike.%${filters.search}%,memo.ilike.%${filters.search}%,cheque_number.ilike.%${filters.search}%,channel.ilike.%${filters.search}%`
+        )
+      }
+
+      const { data } = await query
+      if (data) {
+        setFullStats({
+          withdraws: data.filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t.withdraw  ?? 0), 0),
+          deposits:  data.filter(t => t.type === 'income').reduce((s, t)     => s + Number(t.deposit ?? 0), 0),
+        })
+      }
+    }
+    fetchStats()
+  }, [filters])
 
   const loadTransactions = useCallback(async () => {
     setIsLoading(true)
-    const { data, error } = await supabase
+
+    let query = supabase
       .from('transactions')
-      .select('*')
-      .order('tx_datetime', { ascending: false })
+      .select('*', { count: 'exact' })
+      .order(sort.col, { ascending: sort.dir === 'asc' })
+      .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
+
+    // Apply filters server-side
+    if (filters.type)     query = query.eq('type', filters.type)
+    if (filters.channel)  query = query.eq('channel', filters.channel)
+    if (filters.dateFrom) query = query.gte('tx_datetime', filters.dateFrom)
+    if (filters.dateTo)   query = query.lte('tx_datetime', filters.dateTo + 'T23:59:59')
+    if (filters.search) {
+      query = query.or(
+        `description.ilike.%${filters.search}%,memo.ilike.%${filters.search}%,cheque_number.ilike.%${filters.search}%,channel.ilike.%${filters.search}%`
+      )
+    }
+
+    const { data, error, count } = await query
+
     if (error) {
+      console.error('Load error:', error)
       addToast(error.message, 'error')
     } else {
-      setAllTransactions(data ?? [])
+      setTransactions(data ?? [])
+      setTotalCount(count ?? 0)
     }
     setIsLoading(false)
-  }, [addToast])
+  }, [addToast, filters, sort, page])
 
-  // Derived: filtered + sorted list
-  const filteredTransactions = (() => {
-    let result = allTransactions.filter(tx => {
-      if (filters.type    && tx.type !== filters.type) return false
-      if (filters.channel && tx['channel'] !== filters.channel) return false
-      if (filters.dateFrom || filters.dateTo) {
-        const iso = thaiDateToISO(tx['tx_datetime'])
-        if (filters.dateFrom && iso && iso < filters.dateFrom) return false
-        if (filters.dateTo   && iso && iso > filters.dateTo)   return false
-      }
-      if (filters.search) {
-        const needle = filters.search.toLowerCase()
-        const haystack = [
-          tx['tx_datetime'], tx['description'], tx['cheque_number'],
-          tx['channel'], tx['memo'],
-          tx['withdraw'], tx['deposit'],
-        ].join(' ').toLowerCase()
-        if (!haystack.includes(needle)) return false
-      }
-      return true
-    })
-
-    result.sort((a, b) => {
-      let av = a[sort.col]
-      let bv = b[sort.col]
-      if (NUMERIC_COLS.includes(sort.col)) {
-        av = Number(av) || 0
-        bv = Number(bv) || 0
-      } else {
-        av = String(av ?? '').toLowerCase()
-        bv = String(bv ?? '').toLowerCase()
-      }
-      if (av < bv) return sort.dir === 'asc' ? -1 : 1
-      if (av > bv) return sort.dir === 'asc' ? 1 : -1
-      return 0
-    })
-
-    return result
-  })()
-
-  // Derived: available channel options
-  const channels = [...new Set(allTransactions.map(t => t['channel']).filter(Boolean))].sort()
-
-  // Paged slice
-  const totalPages = Math.ceil(filteredTransactions.length / PAGE_SIZE)
-  const pageTransactions = filteredTransactions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  // Reload whenever filters, sort or page change
+  useEffect(() => {
+    loadTransactions()
+  }, [loadTransactions])
 
   const handleSort = useCallback(col => {
     setSort(prev => ({ col, dir: prev.col === col && prev.dir === 'desc' ? 'asc' : 'desc' }))
@@ -256,32 +270,33 @@ function useTransactions(role) {
     setPage(1)
   }, [])
 
-  // Optimistic update for รายการ field (avoids full reload)
+  // Optimistic updates — update current page only
   const updateRayganLocally = useCallback((id, value) => {
-    setAllTransactions(prev =>
+    setTransactions(prev =>
       prev.map(tx => tx.id === id ? { ...tx, memo: value || null } : tx)
     )
   }, [])
 
   const updateRemarkLocally = useCallback((id, value) => {
-    setAllTransactions(prev =>
+    setTransactions(prev =>
       prev.map(tx => tx.id === id ? { ...tx, remark: value || null } : tx)
     )
   }, [])
 
-  // Stats
   const stats = {
-    total:   filteredTransactions.length,
-    withdraws:  filteredTransactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t['withdraw'] ?? 0), 0),
-    deposits: filteredTransactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t['deposit'] ?? 0), 0),
+    total:     totalCount,
+    withdraws: fullStats.withdraws,
+    deposits:  fullStats.deposits,  
   }
+
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
 
   return {
     isLoading, filters, sort, page, setPage,
-    channels, pageTransactions, filteredTransactions,
+    channels, transactions, totalCount,
     totalPages, stats,
-    loadTransactions, handleSort, handleFilterChange, updateRayganLocally,
-    updateRemarkLocally,
+    loadTransactions, handleSort, handleFilterChange,
+    updateRayganLocally, updateRemarkLocally,
   }
 }
 
@@ -881,11 +896,14 @@ function TransactionTable({
 // ─────────────────────────────────────────────────────────────
 function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, role }) {
   const raygan = tx['memo']
-  const remark = tx['remark']
 
   return (
     <tr>
-      <td><span className="cell-date">{tx['tx_datetime'] ?? ''}</span></td>
+      <td>
+        <span className="cell-date">
+          {formatThaiDateTime(tx.tx_datetime)}
+        </span>
+      </td>
       <td><span className="cell-eff">{tx['effective_date'] ?? ''}</span></td>
       <td>
         <span className="cell-desc" title={tx['description'] ?? ''}>
@@ -947,12 +965,11 @@ function AppShell({ user, role, onLogout }) {
 
   const {
     isLoading, filters, sort, page, setPage,
-    channels, pageTransactions, filteredTransactions,
+    channels, transactions, totalCount,
     totalPages, stats,
-    loadTransactions, handleSort, handleFilterChange, updateRayganLocally,
-    updateRemarkLocally,
+    loadTransactions, handleSort, handleFilterChange,
+    updateRayganLocally, updateRemarkLocally,
   } = useTransactions(role)
-
   // Initial data load
   useEffect(() => { loadTransactions() }, [loadTransactions])
 
@@ -1005,13 +1022,13 @@ function AppShell({ user, role, onLogout }) {
           <div className="ledger-header">
             <div className="ledger-title">สมุดรายการธุรกรรม</div>
             <div className="ledger-count">
-              {filteredTransactions.length.toLocaleString('th-TH')} รายการ
+              {totalCount.toLocaleString('th-TH')} รายการ
             </div>
           </div>
 
           <TransactionTable
-            transactions={pageTransactions}
-            totalFiltered={filteredTransactions.length}
+            transactions={transactions}
+            totalFiltered={totalCount}
             isLoading={isLoading}
             sort={sort}
             page={page}
