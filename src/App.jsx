@@ -16,10 +16,16 @@ const PAGE_SIZE = 25
 const NUMERIC_COLS = ['withdraw', 'deposit', 'balance']
 const PREVIEW_COLS = ['tx_datetime', 'description', 'withdraw', 'deposit', 'balance', 'channel']
 
+const ROLES ={
+  admin: 'admin',
+  withdraw: 'withdrawal',
+  deposit: 'income',
+}
+
 const ROLE_LABELS = {
-  withdrawal: 'หักบัญชี · แก้ไขรายการเท่านั้น',
-  income:     'เข้าบัญชี · แก้ไขรายการเท่านั้น',
-  boss:       'ผู้บริหาร',
+  [ROLES.withdraw]: 'หักบัญชี · แก้ไขรายการเท่านั้น',
+  [ROLES.deposit]:     'เข้าบัญชี · แก้ไขรายการเท่านั้น',
+  [ROLES.admin]:       'ผู้บริหาร',
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -257,6 +263,12 @@ function useTransactions(role) {
     )
   }, [])
 
+  const updateRemarkLocally = useCallback((id, value) => {
+    setAllTransactions(prev =>
+      prev.map(tx => tx.id === id ? { ...tx, remark: value || null } : tx)
+    )
+  }, [])
+
   // Stats
   const stats = {
     total:   filteredTransactions.length,
@@ -269,6 +281,7 @@ function useTransactions(role) {
     channels, pageTransactions, filteredTransactions,
     totalPages, stats,
     loadTransactions, handleSort, handleFilterChange, updateRayganLocally,
+    updateRemarkLocally,
   }
 }
 
@@ -430,7 +443,7 @@ function StatsBar({ stats, role }) {
         </div>
       )}
 
-      {role === 'boss' && (
+      {role === ROLES.admin && (
         <div className="stat">
           <div className="stat-label">ยอดสุทธิ</div>
           <div className="stat-value" style={{ color: netColor }}>
@@ -446,7 +459,7 @@ function StatsBar({ stats, role }) {
 // Toolbar
 // ─────────────────────────────────────────────────────────────
 function Toolbar({ filters, channels, role, onFilterChange, onImportClick }) {
-  const isAccountant = role !== 'boss'
+  const isAccountant = role !== ROLES.admin
 
   return (
     <div className="toolbar">
@@ -502,7 +515,7 @@ function Toolbar({ filters, channels, role, onFilterChange, onImportClick }) {
         aria-label="ถึงวันที่"
       />
 
-      {role === 'boss' && (
+      {role === ROLES.admin && (
         <>
           <div className="toolbar-divider" />
           <button className="btn btn-ghost btn-sm" onClick={onImportClick}>
@@ -527,9 +540,8 @@ function EditRayganModal({ transaction, onClose, onSaved }) {
     setError('')
     setSaving(true)
     const { error: sbError } = await supabase
-      .from('transactions')
-      .update({ memo: value.trim() || null })
-      .eq('id', transaction.id)
+      .rpc('update_memo', { tx_id: transaction.id, new_memo: value.trim() || null })
+
     setSaving(false)
     if (sbError) { setError(sbError.message); return }
     addToast('บันทึกรายการเรียบร้อย', 'success')
@@ -560,6 +572,58 @@ function EditRayganModal({ transaction, onClose, onSaved }) {
           id="raygan-input"
           rows={3}
           placeholder="ระบุรายการหรือหมวดหมู่…"
+          style={{ resize: 'vertical' }}
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          autoFocus
+        />
+      </div>
+      {error && <div className="error-msg" role="alert">{error}</div>}
+    </Modal>
+  )
+}
+
+function EditRemarkModal({ transaction, onClose, onSaved }) {
+  const [value, setValue]   = useState(transaction.remark ?? '')
+  const [error, setError]   = useState('')
+  const [saving, setSaving] = useState(false)
+  const addToast = useToast()
+
+  const handleSave = async () => {
+    setError('')
+    setSaving(true)
+    const { error: sbError } = await supabase
+      .rpc('update_remark', { tx_id: transaction.id, new_remark: value.trim() || null })
+    setSaving(false)
+    if (sbError) { console.error('Remark error:', sbError); setError(sbError.message); return }
+    addToast('บันทึกหมายเหตุเรียบร้อย', 'success')
+    onSaved(transaction.id, value.trim())
+    onClose()
+  }
+
+  return (
+    <Modal
+      title="แก้ไขหมายเหตุ"
+      size="sm"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>ยกเลิก</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+            {saving ? 'กำลังบันทึก…' : 'บันทึก'}
+          </button>
+        </>
+      }
+    >
+      <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--muted)', marginBottom: '1rem', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
+        {`วันที่: ${transaction.tx_datetime}\nคำอธิบาย: ${transaction.description ?? '—'}`}
+      </p>
+      <div className="field">
+        <label htmlFor="remark-input">หมายเหตุ (สำหรับผู้บริหาร)</label>
+        <textarea
+          id="remark-input"
+          rows={3}
+          placeholder="ระบุหมายเหตุ…"
           style={{ resize: 'vertical' }}
           value={value}
           onChange={e => setValue(e.target.value)}
@@ -710,9 +774,9 @@ function ImportModal({ onClose, onImported }) {
 function TransactionTable({
   transactions, totalFiltered, isLoading,
   sort, page, totalPages,
-  role, onSort, onPageChange, onEditRaygan,
+  role, onSort, onPageChange, onEditRaygan, onEditRemark,
 }) {
-  const canEdit = role !== 'boss'
+  const canEdit = role !== ROLES.admin
 
   const columns = [
     { key: 'tx_datetime', label: 'วันที่ทำรายการ' },
@@ -724,6 +788,7 @@ function TransactionTable({
     { key: 'balance',     label: 'ยอดคงเหลือ' },
     { key: 'channel', label: 'ช่องทาง' },
     { key: 'memo',          label: canEdit ? 'รายการ ✏' : 'รายการ' },
+    ...(role === ROLES.admin ? [{ key: 'remark', label: 'หมายเหตุ ✏' }] : []),
   ]
 
   if (isLoading) {
@@ -763,6 +828,8 @@ function TransactionTable({
                 transaction={tx}
                 canEdit={canEdit}
                 onEditRaygan={onEditRaygan}
+                onEditRemark={onEditRemark}
+                role={role}
               />
             ))}
           </tbody>
@@ -812,8 +879,9 @@ function TransactionTable({
 // ─────────────────────────────────────────────────────────────
 // TransactionRow
 // ─────────────────────────────────────────────────────────────
-function TransactionRow({ transaction: tx, canEdit, onEditRaygan }) {
+function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, role }) {
   const raygan = tx['memo']
+  const remark = tx['remark']
 
   return (
     <tr>
@@ -851,6 +919,20 @@ function TransactionRow({ transaction: tx, canEdit, onEditRaygan }) {
           </span>
         )}
       </td>
+      {role === ROLES.admin && (
+        <td>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => onEditRemark(tx)}
+            title="แก้ไขหมายเหตุ"
+          >
+            {tx.remark
+              ? <span className="cell-raygan">{tx.remark}</span>
+              : <span className="cell-raygan-empty">+ เพิ่ม</span>
+            }
+          </button>
+        </td>
+      )}
     </tr>
   )
 }
@@ -861,12 +943,14 @@ function TransactionRow({ transaction: tx, canEdit, onEditRaygan }) {
 function AppShell({ user, role, onLogout }) {
   const [importOpen, setImportOpen]           = useState(false)
   const [editingTransaction, setEditingTransaction] = useState(null)
+  const [editingRemark, setEditingRemark] = useState(null)
 
   const {
     isLoading, filters, sort, page, setPage,
     channels, pageTransactions, filteredTransactions,
     totalPages, stats,
     loadTransactions, handleSort, handleFilterChange, updateRayganLocally,
+    updateRemarkLocally,
   } = useTransactions(role)
 
   // Initial data load
@@ -879,6 +963,10 @@ function AppShell({ user, role, onLogout }) {
 
   const handleRayganSaved = (id, value) => {
     updateRayganLocally(id, value)
+  }
+
+  const handleRemarkSaved = (id, value) => {
+    updateRemarkLocally(id, value)
   }
 
   return (
@@ -932,6 +1020,7 @@ function AppShell({ user, role, onLogout }) {
             onSort={handleSort}
             onPageChange={handlePageChange}
             onEditRaygan={setEditingTransaction}
+            onEditRemark={setEditingRemark}
           />
         </div>
       </main>
@@ -949,6 +1038,14 @@ function AppShell({ user, role, onLogout }) {
           transaction={editingTransaction}
           onClose={() => setEditingTransaction(null)}
           onSaved={handleRayganSaved}
+        />
+      )}
+
+      {editingRemark && (
+        <EditRemarkModal
+          transaction={editingRemark}
+          onClose={() => setEditingRemark(null)}
+          onSaved={handleRemarkSaved}
         />
       )}
     </div>
@@ -987,7 +1084,7 @@ function App() {
       .eq('user_id', authUser.id)
       .single()
     setUser(authUser)
-    setRole(data?.role ?? 'boss')
+    setRole(data?.role ?? null)
   }
 
   const handleLogin = async authUser => {
