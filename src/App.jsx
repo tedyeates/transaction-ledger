@@ -81,6 +81,39 @@ function formatThaiDateTime(isoString) {
   return `${d}/${m}/${y} ${h}:${min}`
 }
 
+function exportToCSV(transactions) {
+  const headers = [
+    'วันที่ทำรายการ', 'วันที่มีผล', 'คำอธิบาย', 'เลขที่เช็ค',
+    'หักบัญชี', 'เข้าบัญชี', 'ยอดคงเหลือ', 'ช่องทาง', 'รายการ', 'หมายเหตุ'
+  ]
+
+  const rows = transactions.map(tx => [
+    formatThaiDateTime(tx.tx_datetime),
+    tx.effective_date ?? '',
+    tx.description ?? '',
+    tx.cheque_number ?? '',
+    tx.withdraw ?? '',
+    tx.deposit ?? '',
+    tx.balance ?? '',
+    tx.channel ?? '',
+    tx.memo ?? '',
+    tx.remark ?? '',
+  ])
+
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+
+  const BOM = '\uFEFF'
+  const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `transactions_${new Date().toISOString().slice(0, 10)}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 /**
  * Split a single CSV line, respecting double-quoted fields.
  */
@@ -306,6 +339,57 @@ const loadTransactions = useCallback(async () => {
     )
   }, [])
 
+  const exportAllTransactions = useCallback(async () => {
+    const EXPORT_CHUNK = 1000
+    let allRows = []
+    let from = 0
+    let hasMore = true
+
+    addToast('กำลังเตรียมข้อมูล…', 'default')
+
+    while (hasMore) {
+      let query = supabase
+        .rpc('get_transactions')
+
+      if (filters.type)     query = query.eq('type', filters.type)
+      if (filters.channel)  query = query.eq('channel', filters.channel)
+      if (filters.dateFrom) query = query.gte('tx_datetime', filters.dateFrom)
+      if (filters.dateTo)   query = query.lte('tx_datetime', filters.dateTo + 'T23:59:59')
+      if (filters.search) {
+        query = query.or(
+          `description.ilike.%${filters.search}%,memo.ilike.%${filters.search}%,cheque_number.ilike.%${filters.search}%,channel.ilike.%${filters.search}%`
+        )
+      }
+
+      query = query
+        .order(sort.col, { ascending: sort.dir === 'asc' })
+        .range(from, from + EXPORT_CHUNK - 1)
+
+      const { data, error } = await query
+
+      if (error) {
+        addToast(error.message, 'error')
+        return
+      }
+
+      allRows = [...allRows, ...(data ?? [])]
+
+      if (!data || data.length < EXPORT_CHUNK) {
+        hasMore = false
+      } else {
+        from += EXPORT_CHUNK
+      }
+    }
+
+    if (allRows.length === 0) {
+      addToast('ไม่มีข้อมูลที่จะส่งออก', 'default')
+      return
+    }
+
+    exportToCSV(allRows)
+    addToast(`ส่งออก ${allRows.length.toLocaleString('th-TH')} รายการเรียบร้อย`, 'success')
+  }, [addToast, filters, sort])
+
   const stats = {
     total:     totalCount,
     withdraws: fullStats.withdraws,
@@ -320,6 +404,7 @@ const loadTransactions = useCallback(async () => {
     totalPages, stats,
     loadTransactions, handleSort, handleFilterChange,
     updateRayganLocally, updateRemarkLocally,
+    exportAllTransactions,
   }
 }
 
@@ -496,7 +581,7 @@ function StatsBar({ stats, role }) {
 // ─────────────────────────────────────────────────────────────
 // Toolbar
 // ─────────────────────────────────────────────────────────────
-function Toolbar({ filters, channels, role, onFilterChange, onImportClick }) {
+function Toolbar({ filters, channels, role, onFilterChange, onImportClick, onExportClick, exporting }) {
   const isAccountant = role !== ROLES.admin
 
   return (
@@ -558,6 +643,13 @@ function Toolbar({ filters, channels, role, onFilterChange, onImportClick }) {
           <div className="toolbar-divider" />
           <button className="btn btn-ghost btn-sm" onClick={onImportClick}>
             ↑ นำเข้า CSV
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={onExportClick}
+            disabled={exporting}
+          >
+            {exporting ? 'กำลังส่งออก…' : '↓ ส่งออก CSV'}
           </button>
         </>
       )}
@@ -990,9 +1082,10 @@ function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, 
 // AppShell — the authenticated layout
 // ─────────────────────────────────────────────────────────────
 function AppShell({ user, role, onLogout }) {
-  const [importOpen, setImportOpen]           = useState(false)
+  const [importOpen, setImportOpen]                 = useState(false)
   const [editingTransaction, setEditingTransaction] = useState(null)
-  const [editingRemark, setEditingRemark] = useState(null)
+  const [editingRemark, setEditingRemark]           = useState(null)
+  const [exporting, setExporting]                   = useState(false)
 
   const {
     isLoading, filters, sort, page, setPage,
@@ -1000,13 +1093,21 @@ function AppShell({ user, role, onLogout }) {
     totalPages, stats,
     loadTransactions, handleSort, handleFilterChange,
     updateRayganLocally, updateRemarkLocally,
+    exportAllTransactions,
   } = useTransactions(role)
+  
   // Initial data load
   useEffect(() => { loadTransactions() }, [loadTransactions])
 
   const handlePageChange = p => {
     setPage(p)
     window.scrollTo(0, 0)
+  }
+
+  const handleExport = async () => {
+    setExporting(true)
+    await exportAllTransactions()
+    setExporting(false)
   }
 
   const handleRayganSaved = (id, value) => {
@@ -1042,6 +1143,8 @@ function AppShell({ user, role, onLogout }) {
         role={role}
         onFilterChange={handleFilterChange}
         onImportClick={() => setImportOpen(true)}
+        onExportClick={handleExport}
+        exporting={exporting}
       />
 
       {/* Stats */}
