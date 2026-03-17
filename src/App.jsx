@@ -903,8 +903,14 @@ function TransactionTable({
 function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, role }) {
   const raygan = tx['memo']
 
+  const isMissingMemo =
+    canEdit &&
+    ((role === ROLES.withdraw && tx.type === 'withdrawal') ||
+     (role === ROLES.deposit  && tx.type === 'income')) &&
+    !raygan
+
   return (
-    <tr>
+    <tr className={isMissingMemo ? 'row-memo-missing' : ''}>
       <td>
         <span className="cell-date">
           {formatThaiDateTime(tx.tx_datetime)}
