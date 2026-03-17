@@ -31,6 +31,19 @@ const ROLE_LABELS = {
 // Utility helpers
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Convert "D/M/YYYY HH:MM" Buddhist Era string to ISO format
+ * "YYYY-MM-DDTHH:MM:00" in Gregorian year for Supabase TIMESTAMPTZ
+ */
+function thaiDateStringToISO(str) {
+  if (!str) return null
+  const match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/)
+  if (!match) return null
+  const [, d, m, y, h, min] = match
+  const gregorianYear = parseInt(y) - 543
+  return `${gregorianYear}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h).padStart(2, '0')}:${min}:00`
+}
+
 /** Format a number as Thai Baht */
 function formatBaht(value) {
   if (value == null || value === '') return ''
@@ -43,11 +56,11 @@ function formatBaht(value) {
 function formatThaiDateTime(isoString) {
   if (!isoString) return ''
   const date = new Date(isoString)
-  const d = date.getDate()
-  const m = date.getMonth() + 1
-  const y = date.getFullYear()  // this will be 2569 etc
-  const h = String(date.getHours()).padStart(2, '0')
-  const min = String(date.getMinutes()).padStart(2, '0')
+  const d = date.getUTCDate()
+  const m = date.getUTCMonth() + 1
+  const y = date.getUTCFullYear() + 543
+  const h = String(date.getUTCHours()).padStart(2, '0')
+  const min = String(date.getUTCMinutes()).padStart(2, '0')
   return `${d}/${m}/${y} ${h}:${min}`
 }
 
@@ -120,7 +133,7 @@ function parseBankCSV(arrayBuffer) {
     const withdraw  = parseFloat(r['หักบัญชี']?.replace(/,/g, ''))  || null
     const deposit = parseFloat(r['เข้าบัญชี']?.replace(/,/g, '')) || null
     const balance = parseFloat(r['ยอดคงเหลือ']?.replace(/,/g, '')) || null
-    const txDatetime = r['วันที่ทำรายการ']
+    const txDatetime = thaiDateStringToISO(r['วันที่ทำรายการ'])
 
     return {
       tx_datetime:    txDatetime,
