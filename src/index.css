@@ -310,8 +310,8 @@ td { padding: 0.6rem 0.85rem; vertical-align: middle; }
 .cell-amt-deposit { color: var(--deposit); }
 .cell-balance { font-family: var(--font-mono); font-size: 0.82rem; text-align: right; white-space: nowrap; }
 .cell-channel { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); }
-.cell-raygan         { font-size: 0.84rem; color: var(--blue); font-style: italic; }
-.cell-raygan-empty   { color: var(--muted); font-style: italic; }
+.cell-raygan         { font-size: 0.72rem; color: var(--blue); letter-spacing: 0;}
+.cell-raygan-empty   { color: var(--muted);}
 
 /* ── Empty / loading states ────────────────────────────────── */
 .empty-state { text-align: center; padding: 4rem 2rem; color: var(--muted); }

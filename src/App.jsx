@@ -228,37 +228,38 @@ function useTransactions(role) {
     fetchStats()
   }, [filters])
 
-  const loadTransactions = useCallback(async () => {
-    setIsLoading(true)
+const loadTransactions = useCallback(async () => {
+  setIsLoading(true)
 
-    let query = supabase
-      .from('transactions')
-      .select('*', { count: 'exact' })
-      .order(sort.col, { ascending: sort.dir === 'asc' })
-      .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
+  let query = supabase
+    .rpc('get_transactions', {}, { count: 'exact' })
 
-    // Apply filters server-side
-    if (filters.type)     query = query.eq('type', filters.type)
-    if (filters.channel)  query = query.eq('channel', filters.channel)
-    if (filters.dateFrom) query = query.gte('tx_datetime', filters.dateFrom)
-    if (filters.dateTo)   query = query.lte('tx_datetime', filters.dateTo + 'T23:59:59')
-    if (filters.search) {
-      query = query.or(
-        `description.ilike.%${filters.search}%,memo.ilike.%${filters.search}%,cheque_number.ilike.%${filters.search}%,channel.ilike.%${filters.search}%`
-      )
-    }
+  // Apply filters
+  if (filters.type)     query = query.eq('type', filters.type)
+  if (filters.channel)  query = query.eq('channel', filters.channel)
+  if (filters.dateFrom) query = query.gte('tx_datetime', filters.dateFrom)
+  if (filters.dateTo)   query = query.lte('tx_datetime', filters.dateTo + 'T23:59:59')
+  if (filters.search) {
+    query = query.or(
+      `description.ilike.%${filters.search}%,memo.ilike.%${filters.search}%,cheque_number.ilike.%${filters.search}%,channel.ilike.%${filters.search}%`
+    )
+  }
 
-    const { data, error, count } = await query
+  query = query
+    .order(sort.col, { ascending: sort.dir === 'asc' })
+    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
 
-    if (error) {
-      console.error('Load error:', error)
-      addToast(error.message, 'error')
-    } else {
-      setTransactions(data ?? [])
-      setTotalCount(count ?? 0)
-    }
-    setIsLoading(false)
-  }, [addToast, filters, sort, page])
+  const { data, error, count } = await query
+
+  if (error) {
+    console.error('Load error:', error)
+    addToast(error.message, 'error')
+  } else {
+    setTransactions(data ?? [])
+    setTotalCount(count ?? 0)
+  }
+  setIsLoading(false)
+}, [addToast, filters, sort, page])
 
   // Reload whenever filters, sort or page change
   useEffect(() => {
@@ -805,7 +806,7 @@ function TransactionTable({
     { key: 'cheque_number',     label: 'เลขที่เช็ค' },
     { key: 'withdraw',       label: 'หักบัญชี' },
     { key: 'deposit',      label: 'เข้าบัญชี' },
-    { key: 'balance',     label: 'ยอดคงเหลือ' },
+    ...(role === ROLES.admin ? [{ key: 'balance', label: 'ยอดคงเหลือ' }] : []),
     { key: 'channel', label: 'ช่องทาง' },
     { key: 'memo',          label: canEdit ? 'รายการ ✏' : 'รายการ' },
     ...(role === ROLES.admin ? [{ key: 'remark', label: 'หมายเหตุ ✏' }] : []),
@@ -922,7 +923,9 @@ function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, 
       <td className={`cell-amt ${tx['deposit'] ? 'cell-amt-deposit' : ''}`}>
         {formatBaht(tx['deposit'])}
       </td>
-      <td className="cell-balance">{formatBaht(tx['balance'])}</td>
+      {role === ROLES.admin && (
+        <td className="cell-balance">{formatBaht(tx['balance'])}</td>
+      )}
       <td><span className="cell-channel">{tx['channel'] ?? ''}</span></td>
       <td>
         {canEdit ? (
