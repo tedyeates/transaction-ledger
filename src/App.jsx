@@ -31,17 +31,34 @@ const ROLE_LABELS = {
 // Utility helpers
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Convert "D/M/YYYY HH:MM" Buddhist Era string to ISO format
- * "YYYY-MM-DDTHH:MM:00" in Gregorian year for Supabase TIMESTAMPTZ
- */
+const THAI_MONTHS = {
+  'ม.ค.': 1, 'ก.พ.': 2, 'มี.ค.': 3, 'เม.ย.': 4,
+  'พ.ค.': 5, 'มิ.ย.': 6, 'ก.ค.': 7, 'ส.ค.': 8,
+  'ก.ย.': 9, 'ต.ค.': 10, 'พ.ย.': 11, 'ธ.ค.': 12,
+}
+
 function thaiDateStringToISO(str) {
   if (!str) return null
-  const match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/)
-  if (!match) return null
-  const [, d, m, y, h, min] = match
-  const gregorianYear = parseInt(y) - 543
-  return `${gregorianYear}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h).padStart(2, '0')}:${min}:00`
+
+  // Format: "16 มี.ค. 2569 21:07"
+  const thaiMatch = str.match(/^(\d{1,2})\s+(\S+)\s+(\d{4})\s+(\d{1,2}):(\d{2})/)
+  if (thaiMatch) {
+    const [, d, monthAbbr, y, h, min] = thaiMatch
+    const month = THAI_MONTHS[monthAbbr]
+    if (!month) return null
+    const gregorianYear = parseInt(y) - 543
+    return `${gregorianYear}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h).padStart(2, '0')}:${min}:00`
+  }
+
+  // Fallback: original "D/M/YYYY HH:MM" format
+  const slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/)
+  if (slashMatch) {
+    const [, d, m, y, h, min] = slashMatch
+    const gregorianYear = parseInt(y) - 543
+    return `${gregorianYear}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h).padStart(2, '0')}:${min}:00`
+  }
+
+  return null
 }
 
 /** Format a number as Thai Baht */
@@ -700,12 +717,12 @@ function ImportModal({ onClose, onImported }) {
     for (let i = 0; i < parsedRows.length; i += CHUNK) {
       const chunk = parsedRows.slice(i, i + CHUNK)
       const { error: sbError } = await supabase
-        .from('transactions')
-        .upsert(chunk, { onConflict: 'tx_datetime,balance', ignoreDuplicates: true })
-
-      if (sbError) { 
+        .rpc('import_transactions', { rows: chunk })
+      if (sbError) {
         console.error('Import error:', sbError)
-        setError(sbError.message); setImporting(false); return 
+        setError(sbError.message)
+        setImporting(false)
+        return
       }
       imported += chunk.length
     }
