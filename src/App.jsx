@@ -195,7 +195,7 @@ function useTransactions(role) {
   // Lock type filter for accountants
   useEffect(() => {
     if (role === ROLES.withdraw) setFilters(f => ({ ...f, type: 'withdrawal' }))
-    if (role === ROLES.income) setFilters(f => ({ ...f, type: 'income' }))
+    if (role === ROLES.deposit) setFilters(f => ({ ...f, type: 'income' }))
   }, [role])
 
   // Fetch channels once on mount for the filter dropdown
@@ -211,25 +211,17 @@ function useTransactions(role) {
 
   useEffect(() => {
     const fetchStats = async () => {
-      let query = supabase
-        .from('transactions')
-        .select('type, withdraw, deposit')
-
-      if (filters.type)     query = query.eq('type', filters.type)
-      if (filters.channel)  query = query.eq('channel', filters.channel)
-      if (filters.dateFrom) query = query.gte('tx_datetime', filters.dateFrom)
-      if (filters.dateTo)   query = query.lte('tx_datetime', filters.dateTo + 'T23:59:59')
-      if (filters.search) {
-        query = query.or(
-          `description.ilike.%${filters.search}%,memo.ilike.%${filters.search}%,cheque_number.ilike.%${filters.search}%,channel.ilike.%${filters.search}%`
-        )
-      }
-
-      const { data } = await query
-      if (data) {
+      const { data, error } = await supabase.rpc('get_transaction_stats', {
+        p_type:      filters.type      || null,
+        p_channel:   filters.channel   || null,
+        p_date_from: filters.dateFrom  || null,
+        p_date_to:   filters.dateTo ? filters.dateTo + 'T23:59:59' : null,
+        p_search:    filters.search    || null,
+      })
+      if (data?.[0]) {
         setFullStats({
-          withdraws: data.filter(t => t.type === 'withdrawal').reduce((s, t) => s + Number(t.withdraw  ?? 0), 0),
-          deposits:  data.filter(t => t.type === 'income').reduce((s, t)     => s + Number(t.deposit ?? 0), 0),
+          withdraws: Number(data[0].total_withdraws),
+          deposits:  Number(data[0].total_deposits),
         })
       }
     }
