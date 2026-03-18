@@ -12,10 +12,10 @@ const supabase = createClient(
 // ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
-const PAGE_SIZE = 25
+const PAGE_SIZE = 75
 const PREVIEW_COLS = ['tx_datetime', 'description', 'withdraw', 'deposit', 'balance', 'channel']
 
-const ROLES ={
+const ROLES = {
   admin: 'admin',
   withdraw: 'withdrawal',
   deposit: 'income',
@@ -23,8 +23,8 @@ const ROLES ={
 
 const ROLE_LABELS = {
   [ROLES.withdraw]: 'หักบัญชี · แก้ไขรายการเท่านั้น',
-  [ROLES.deposit]:     'เข้าบัญชี · แก้ไขรายการเท่านั้น',
-  [ROLES.admin]:       'ผู้บริหาร',
+  [ROLES.deposit]:  'เข้าบัญชี · แก้ไขรายการเท่านั้น',
+  [ROLES.admin]:    'ผู้บริหาร',
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -40,7 +40,6 @@ const THAI_MONTHS = {
 function thaiDateStringToISO(str) {
   if (!str) return null
 
-  // Format: "16 มี.ค. 2569 21:07"
   const thaiMatch = str.match(/^(\d{1,2})\s+(\S+)\s+(\d{4})\s+(\d{1,2}):(\d{2})/)
   if (thaiMatch) {
     const [, d, monthAbbr, y, h, min] = thaiMatch
@@ -50,7 +49,6 @@ function thaiDateStringToISO(str) {
     return `${gregorianYear}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h).padStart(2, '0')}:${min}:00`
   }
 
-  // Fallback: original "D/M/YYYY HH:MM" format
   const slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/)
   if (slashMatch) {
     const [, d, m, y, h, min] = slashMatch
@@ -61,7 +59,6 @@ function thaiDateStringToISO(str) {
   return null
 }
 
-/** Format a number as Thai Baht */
 function formatBaht(value) {
   if (value == null || value === '') return ''
   return '฿' + Number(value).toLocaleString('th-TH', {
@@ -114,7 +111,6 @@ function exportToCSV(transactions) {
   URL.revokeObjectURL(url)
 }
 
-// Add this hook near the top of the file
 function useDebounce(value, delay) {
   const [debounced, setDebounced] = useState(value)
   useEffect(() => {
@@ -124,9 +120,6 @@ function useDebounce(value, delay) {
   return debounced
 }
 
-/**
- * Split a single CSV line, respecting double-quoted fields.
- */
 function splitCSVLine(line) {
   const fields = []
   let current = ''
@@ -145,14 +138,7 @@ function splitCSVLine(line) {
   return fields
 }
 
-/**
- * Parse a bank CSV buffer (TIS-620 or UTF-8).
- * Skips header rows until วันที่ทำรายการ is found,
- * stops reading at the first row with no date value.
- * Returns an array of transaction objects ready for Supabase insert.
- */
 function parseBankCSV(arrayBuffer) {
-  // Try TIS-620 (windows-874 is the browser-supported alias), fall back to UTF-8
   let text
   try {
     const decoded = new TextDecoder('windows-874').decode(new Uint8Array(arrayBuffer))
@@ -163,7 +149,6 @@ function parseBankCSV(arrayBuffer) {
 
   const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
 
-  // Locate the header row
   let headerIndex = -1
   let headers = []
   for (let i = 0; i < lines.length; i++) {
@@ -176,7 +161,6 @@ function parseBankCSV(arrayBuffer) {
   }
   if (headerIndex === -1) throw new Error('ไม่พบหัวตาราง (วันที่ทำรายการ) ในไฟล์ CSV')
 
-  // Read data rows until no date is found (footer rows)
   const rows = []
   for (let i = headerIndex + 1; i < lines.length; i++) {
     const cols = splitCSVLine(lines[i])
@@ -191,8 +175,8 @@ function parseBankCSV(arrayBuffer) {
 
   return rows.map(r => {
     const withdraw  = parseFloat(r['หักบัญชี']?.replace(/,/g, ''))  || null
-    const deposit = parseFloat(r['เข้าบัญชี']?.replace(/,/g, '')) || null
-    const balance = parseFloat(r['ยอดคงเหลือ']?.replace(/,/g, '')) || null
+    const deposit   = parseFloat(r['เข้าบัญชี']?.replace(/,/g, '')) || null
+    const balance   = parseFloat(r['ยอดคงเหลือ']?.replace(/,/g, '')) || null
     const txDatetime = thaiDateStringToISO(r['วันที่ทำรายการ'])
 
     return {
@@ -200,9 +184,9 @@ function parseBankCSV(arrayBuffer) {
       effective_date: r['วันที่มีผล']        || null,
       description:    r['คำอธิบาย']          || null,
       cheque_number:  r['เลขที่เช็ค']        || null,
-      withdraw:          withdraw,
-      deposit:         deposit,
-      balance:        balance,
+      withdraw,
+      deposit,
+      balance,
       channel:        r['ช่องทางทำรายการ']   || null,
       type:           withdraw != null ? 'withdrawal' : 'income',
     }
@@ -210,7 +194,7 @@ function parseBankCSV(arrayBuffer) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Toast context — provides addToast() to the whole tree
+// Toast context
 // ─────────────────────────────────────────────────────────────
 const ToastContext = createContext(null)
 const useToast = () => useContext(ToastContext)
@@ -239,150 +223,176 @@ function ToastProvider({ children }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// useTransactions — all data fetching and filtering logic
+// useTransactions — infinite scroll version
+// Key changes:
+//   • transactions is now an accumulated list (append-only per filter set)
+//   • page tracks the *next* page to load
+//   • hasMore signals whether more pages exist
+//   • loadMore() fetches the next page and appends
+//   • resetAndLoad() resets the list and loads page 1 fresh
 // ─────────────────────────────────────────────────────────────
 function useTransactions(role) {
   const [transactions, setTransactions] = useState([])
-  const [totalCount, setTotalCount] = useState(0)
-  const [isLoading, setIsLoading] = useState(false)
-  const [filters, setFilters] = useState({
+  const [totalCount, setTotalCount]     = useState(0)
+  const [isLoading, setIsLoading]       = useState(false)
+  const [isFetchingMore, setIsFetchingMore] = useState(false)
+  const [hasMore, setHasMore]           = useState(false)
+  const [page, setPage]                 = useState(1)         // next page to fetch
+  const [filters, setFilters]           = useState({
     search: '', type: '', channel: '', dateFrom: '', dateTo: '',
     colDesc: '', colCheque: '', colMemo: '', colRemark: '',
     colChannel: '', colWithdraw: '', colDeposit: '', colBalance: '',
   })
-  const [sort, setSort] = useState({ col: 'tx_datetime', dir: 'desc' })
-  const [page, setPage] = useState(1)
-  const [fullStats, setFullStats] = useState({ withdraws: 0, deposits: 0 })
+  const [sort, setSort]                 = useState({ col: 'tx_datetime', dir: 'desc' })
+  const [fullStats, setFullStats]       = useState({ withdraws: 0, deposits: 0 })
   const [latestBalance, setLatestBalance] = useState(null)
   const addToast = useToast()
 
-  const buildFilterParams = useCallback(() => ({
-    p_type:        filters.type        || null,
-    p_channel:     filters.channel     || null,
-    p_date_from:   filters.dateFrom    || null,
-    p_date_to:     filters.dateTo ? filters.dateTo + 'T23:59:59' : null,
-    p_search:      filters.search      || null,
-    p_desc:        filters.colDesc     || null,
-    p_cheque:      filters.colCheque   || null,
-    p_memo:        filters.colMemo     || null,
-    p_remark:      filters.colRemark   || null,
-    p_col_channel: filters.colChannel  || null,
-    p_withdraw:    filters.colWithdraw ? Number(filters.colWithdraw) : null,
-    p_deposit:     filters.colDeposit  ? Number(filters.colDeposit)  : null,
-    p_balance:     filters.colBalance  ? Number(filters.colBalance)  : null,
+  // Stable ref so loadMore closure always sees latest page/filters/sort
+  const stateRef = useRef({ page, filters, sort })
+  useEffect(() => { stateRef.current = { page, filters, sort } }, [page, filters, sort])
+
+  const buildFilterParams = useCallback((f = filters) => ({
+    p_type:        f.type        || null,
+    p_channel:     f.channel     || null,
+    p_date_from:   f.dateFrom    || null,
+    p_date_to:     f.dateTo ? f.dateTo + 'T23:59:59' : null,
+    p_search:      f.search      || null,
+    p_desc:        f.colDesc     || null,
+    p_cheque:      f.colCheque   || null,
+    p_memo:        f.colMemo     || null,
+    p_remark:      f.colRemark   || null,
+    p_col_channel: f.colChannel  || null,
+    p_withdraw:    f.colWithdraw ? Number(f.colWithdraw) : null,
+    p_deposit:     f.colDeposit  ? Number(f.colDeposit)  : null,
+    p_balance:     f.colBalance  ? Number(f.colBalance)  : null,
   }), [filters])
 
+  // Fetch latest balance once
   useEffect(() => {
-    supabase
-      .rpc('get_latest_balance')
-      .then(({ data }) => {
-        if (data != null) setLatestBalance(data)
-      })
+    supabase.rpc('get_latest_balance').then(({ data }) => {
+      if (data != null) setLatestBalance(data)
+    })
   }, [])
 
   // Lock type filter for accountants
   useEffect(() => {
     if (role === ROLES.withdraw) setFilters(f => ({ ...f, type: 'withdrawal' }))
-    if (role === ROLES.deposit) setFilters(f => ({ ...f, type: 'income' }))
+    if (role === ROLES.deposit)  setFilters(f => ({ ...f, type: 'income' }))
   }, [role])
 
+  // Stats query (re-runs on filter change)
   useEffect(() => {
-    const fetchStats = async () => {
-      const { data, error } = await supabase.rpc('get_transaction_stats_v2', buildFilterParams())
+    supabase.rpc('get_transaction_stats_v2', buildFilterParams()).then(({ data }) => {
       if (data?.[0]) {
         setFullStats({
           withdraws: Number(data[0].total_withdraws),
           deposits:  Number(data[0].total_deposits),
         })
       }
-    }
-    fetchStats()
+    })
   }, [buildFilterParams])
 
-const loadTransactions = useCallback(async () => {
-  setIsLoading(true)
+  // ── resetAndLoad: wipe list, fetch page 1 ──────────────────
+  const resetAndLoad = useCallback(async (newFilters = filters, newSort = sort) => {
+    setIsLoading(true)
+    setTransactions([])
+    setPage(1)
+    setHasMore(false)
 
-  let query = supabase.rpc('get_transactions_v2', buildFilterParams(), { count: 'exact' })
+    const params = buildFilterParams(newFilters)
+    const { data, error, count } = await supabase
+      .rpc('get_transactions_v2', params, { count: 'exact' })
+      .order(newSort.col, { ascending: newSort.dir === 'asc' })
+      .range(0, PAGE_SIZE - 1)
 
-  query = query
-    .order(sort.col, { ascending: sort.dir === 'asc' })
-    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
+    if (error) {
+      addToast(error.message, 'error')
+    } else {
+      const rows = data ?? []
+      setTransactions(rows)
+      setTotalCount(count ?? 0)
+      setHasMore(rows.length === PAGE_SIZE && rows.length < (count ?? 0))
+      setPage(2)    // next fetch will request page 2
+    }
+    setIsLoading(false)
+  }, [addToast, buildFilterParams, filters, sort])
 
-  const { data, error, count } = await query
+  // ── loadMore: append next page ─────────────────────────────
+  const loadMore = useCallback(async () => {
+    if (isFetchingMore) return
+    setIsFetchingMore(true)
 
-  if (error) {
-    console.error('Load error:', error)
-    addToast(error.message, 'error')
-  } else {
-    setTransactions(data ?? [])
-    setTotalCount(count ?? 0)
-  }
-  setIsLoading(false)
-}, [addToast, buildFilterParams, sort, page])
+    const { page: currentPage, filters: currentFilters, sort: currentSort } = stateRef.current
+    const params = buildFilterParams(currentFilters)
+    const from = (currentPage - 1) * PAGE_SIZE
+    const to   = from + PAGE_SIZE - 1
 
-  // Reload whenever filters, sort or page change
+    const { data, error, count } = await supabase
+      .rpc('get_transactions_v2', params, { count: 'exact' })
+      .order(currentSort.col, { ascending: currentSort.dir === 'asc' })
+      .range(from, to)
+
+    if (error) {
+      addToast(error.message, 'error')
+    } else {
+      const rows = data ?? []
+      setTransactions(prev => {
+        const existingIds = new Set(prev.map(t => t.id))
+        const fresh = rows.filter(r => !existingIds.has(r.id))
+        return [...prev, ...fresh]
+      })
+      setTotalCount(count ?? 0)
+      const newTotal = transactions.length + rows.length
+      setHasMore(rows.length === PAGE_SIZE && newTotal < (count ?? 0))
+      setPage(p => p + 1)
+    }
+    setIsFetchingMore(false)
+  }, [addToast, buildFilterParams, isFetchingMore, transactions.length])
+
+  // Initial load
   useEffect(() => {
-    loadTransactions()
-  }, [loadTransactions])
+    resetAndLoad(filters, sort)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleSort = useCallback(col => {
-    setSort(prev => ({ col, dir: prev.col === col && prev.dir === 'desc' ? 'asc' : 'desc' }))
-    setPage(1)
-  }, [])
+    const newSort = { col, dir: sort.col === col && sort.dir === 'desc' ? 'asc' : 'desc' }
+    setSort(newSort)
+    resetAndLoad(filters, newSort)
+  }, [filters, sort, resetAndLoad])
 
   const handleFilterChange = useCallback(delta => {
-    setFilters(prev => ({ ...prev, ...delta }))
-    setPage(1)
-  }, [])
+    const newFilters = { ...filters, ...delta }
+    setFilters(newFilters)
+    resetAndLoad(newFilters, sort)
+  }, [filters, sort, resetAndLoad])
 
-  // Optimistic updates — update current page only
   const updateRayganLocally = useCallback((id, value) => {
-    setTransactions(prev =>
-      prev.map(tx => tx.id === id ? { ...tx, memo: value || null } : tx)
-    )
+    setTransactions(prev => prev.map(tx => tx.id === id ? { ...tx, memo: value || null } : tx))
   }, [])
 
   const updateRemarkLocally = useCallback((id, value) => {
-    setTransactions(prev =>
-      prev.map(tx => tx.id === id ? { ...tx, remark: value || null } : tx)
-    )
+    setTransactions(prev => prev.map(tx => tx.id === id ? { ...tx, remark: value || null } : tx))
   }, [])
 
   const exportAllTransactions = useCallback(async () => {
     const EXPORT_CHUNK = 1000
     let allRows = []
     let from = 0
-    let hasMore = true
-
+    let more = true
     addToast('กำลังเตรียมข้อมูล…', 'default')
-
-    while (hasMore) {
-      let query = supabase
+    while (more) {
+      const { data, error } = await supabase
         .rpc('get_transactions_v2', buildFilterParams())
         .order(sort.col, { ascending: sort.dir === 'asc' })
         .range(from, from + EXPORT_CHUNK - 1)
-
-      const { data, error } = await query
-
-      if (error) {
-        addToast(error.message, 'error')
-        return
-      }
-
+      if (error) { addToast(error.message, 'error'); return }
       allRows = [...allRows, ...(data ?? [])]
-
-      if (!data || data.length < EXPORT_CHUNK) {
-        hasMore = false
-      } else {
-        from += EXPORT_CHUNK
-      }
+      more = data?.length === EXPORT_CHUNK
+      from += EXPORT_CHUNK
     }
-
-    if (allRows.length === 0) {
-      addToast('ไม่มีข้อมูลที่จะส่งออก', 'default')
-      return
-    }
-
+    if (!allRows.length) { addToast('ไม่มีข้อมูลที่จะส่งออก', 'default'); return }
     exportToCSV(allRows)
     addToast(`ส่งออก ${allRows.length.toLocaleString('th-TH')} รายการเรียบร้อย`, 'success')
   }, [addToast, buildFilterParams, sort])
@@ -390,17 +400,17 @@ const loadTransactions = useCallback(async () => {
   const stats = {
     total:     totalCount,
     withdraws: fullStats.withdraws,
-    deposits:  fullStats.deposits, 
+    deposits:  fullStats.deposits,
     balance:   latestBalance,
   }
-  
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
 
   return {
-    isLoading, filters, sort, page, setPage, 
+    isLoading, isFetchingMore, hasMore,
+    filters, sort,
     transactions, totalCount,
-    totalPages, stats,
-    loadTransactions, handleSort, handleFilterChange,
+    stats,
+    loadMore, resetAndLoad,
+    handleSort, handleFilterChange,
     updateRayganLocally, updateRemarkLocally,
     exportAllTransactions,
   }
@@ -410,16 +420,12 @@ const loadTransactions = useCallback(async () => {
 // Small reusable UI components
 // ─────────────────────────────────────────────────────────────
 
-function Spinner() {
-  return <div className="spinner" role="status" aria-label="กำลังโหลด" />
+function Spinner({ small }) {
+  return <div className={`spinner${small ? ' spinner-sm' : ''}`} role="status" aria-label="กำลังโหลด" />
 }
 
 function Modal({ title, onClose, footer, size, children }) {
-  // Close on overlay click
-  const handleOverlayClick = e => {
-    if (e.target === e.currentTarget) onClose()
-  }
-  // Close on Escape key
+  const handleOverlayClick = e => { if (e.target === e.currentTarget) onClose() }
   useEffect(() => {
     const handleKey = e => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handleKey)
@@ -449,21 +455,15 @@ function SortableHeader({ col, label, sort, onSort, filterValue, onFilterChange,
   const debouncedValue = useDebounce(localValue, 400)
 
   useEffect(() => {
-    if (debouncedValue !== filterValue) {
-      onFilterChange?.(debouncedValue)
-    }
+    if (debouncedValue !== filterValue) onFilterChange?.(debouncedValue)
   }, [debouncedValue])
 
   useEffect(() => {
-    if (filterValue === '' && localValue !== '') {
-      setLocalValue('')
-    }
+    if (filterValue === '' && localValue !== '') setLocalValue('')
   }, [filterValue])
 
   const handleChange = e => {
-    const val = numeric
-      ? e.target.value.replace(/[^0-9.]/g, '')
-      : e.target.value
+    const val = numeric ? e.target.value.replace(/[^0-9.]/g, '') : e.target.value
     setLocalValue(val)
   }
 
@@ -483,6 +483,66 @@ function SortableHeader({ col, label, sort, onSort, filterValue, onFilterChange,
         />
       )}
     </th>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// ScrollToTop button — appears after scrolling down
+// ─────────────────────────────────────────────────────────────
+function ScrollToTopButton() {
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const onScroll = () => setVisible(window.scrollY > 400)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  if (!visible) return null
+
+  return (
+    <button
+      className="scroll-to-top"
+      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      aria-label="กลับขึ้นด้านบน"
+      title="กลับขึ้นด้านบน"
+    >
+      ↑
+    </button>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// InfiniteScrollSentinel — triggers loadMore via IntersectionObserver
+// ─────────────────────────────────────────────────────────────
+function InfiniteScrollSentinel({ hasMore, isFetchingMore, onLoadMore, totalCount, loadedCount }) {
+  const sentinelRef = useRef(null)
+
+  useEffect(() => {
+    if (!sentinelRef.current || !hasMore) return
+    const scrollContainer = sentinelRef.current.closest('.table-scroll')
+    const observer = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) onLoadMore() },
+      { root: scrollContainer, rootMargin: '300px' }
+    )
+    observer.observe(sentinelRef.current)
+    return () => observer.disconnect()
+  }, [hasMore, onLoadMore])
+
+  return (
+    <div className="infinite-sentinel" ref={sentinelRef}>
+      {isFetchingMore && (
+        <div className="infinite-loading">
+          <Spinner small />
+          <span>กำลังโหลดเพิ่มเติม…</span>
+        </div>
+      )}
+      {!hasMore && loadedCount > 0 && (
+        <div className="infinite-end">
+          แสดงครบทั้ง {loadedCount.toLocaleString('th-TH')} รายการ จาก {totalCount.toLocaleString('th-TH')} รายการ
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -686,7 +746,7 @@ function Toolbar({ filters, role, onFilterChange, onImportClick, onExportClick, 
 }
 
 // ─────────────────────────────────────────────────────────────
-// EditRayganModal — edit the รายการ field only
+// EditRayganModal
 // ─────────────────────────────────────────────────────────────
 function EditRayganModal({ transaction, onClose, onSaved }) {
   const [value, setValue]   = useState(transaction['memo'] ?? '')
@@ -699,7 +759,6 @@ function EditRayganModal({ transaction, onClose, onSaved }) {
     setSaving(true)
     const { error: sbError } = await supabase
       .rpc('update_memo', { tx_id: transaction.id, new_memo: value.trim() || null })
-
     setSaving(false)
     if (sbError) { setError(sbError.message); return }
     addToast('บันทึกรายการเรียบร้อย', 'success')
@@ -794,7 +853,7 @@ function EditRemarkModal({ transaction, onClose, onSaved }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// ImportModal — CSV upload and preview
+// ImportModal
 // ─────────────────────────────────────────────────────────────
 function ImportModal({ onClose, onImported }) {
   const [parsedRows, setParsedRows] = useState(null)
@@ -836,8 +895,7 @@ function ImportModal({ onClose, onImported }) {
     let imported = 0
     for (let i = 0; i < parsedRows.length; i += CHUNK) {
       const chunk = parsedRows.slice(i, i + CHUNK)
-      const { error: sbError } = await supabase
-        .rpc('import_transactions', { rows: chunk })
+      const { error: sbError } = await supabase.rpc('import_transactions', { rows: chunk })
       if (sbError) {
         console.error('Import error:', sbError)
         setError(sbError.message)
@@ -927,25 +985,24 @@ function ImportModal({ onClose, onImported }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// TransactionTable
+// TransactionTable — no pagination UI; sentinel at bottom
 // ─────────────────────────────────────────────────────────────
 function TransactionTable({
-  transactions, totalFiltered, isLoading,
-  sort, page, totalPages,
-  role, onSort, onPageChange, onEditRaygan, onEditRemark,
+  transactions, totalCount, isLoading, isFetchingMore, hasMore,
+  sort, role, onSort, onLoadMore, onEditRaygan, onEditRemark,
   columnFilters, onColumnFilterChange,
 }) {
   const canEdit = role !== ROLES.admin
 
   const columns = [
-    { key: 'tx_datetime', label: 'วันที่ทำรายการ' },
-    { key: 'effective_date',     label: 'วันที่มีผล' },
-    { key: 'description',       label: 'คำอธิบาย', filterKey: 'colDesc', numeric: false },
-    { key: 'cheque_number',     label: 'เลขที่เช็ค', filterKey: 'colCheque', numeric: false },
-    { key: 'withdraw',       label: 'หักบัญชี', filterKey: 'colWithdraw', numeric: true },
-    { key: 'deposit',      label: 'เข้าบัญชี', filterKey: 'colDeposit', numeric: true },
+    { key: 'tx_datetime',   label: 'วันที่ทำรายการ' },
+    { key: 'effective_date', label: 'วันที่มีผล' },
+    { key: 'description',   label: 'คำอธิบาย',   filterKey: 'colDesc',     numeric: false },
+    { key: 'cheque_number', label: 'เลขที่เช็ค',  filterKey: 'colCheque',   numeric: false },
+    { key: 'withdraw',      label: 'หักบัญชี',    filterKey: 'colWithdraw', numeric: true  },
+    { key: 'deposit',       label: 'เข้าบัญชี',   filterKey: 'colDeposit',  numeric: true  },
     ...(role === ROLES.admin ? [{ key: 'balance', label: 'ยอดคงเหลือ', filterKey: 'colBalance', numeric: true }] : []),
-    { key: 'channel', label: 'ช่องทาง', filterKey: 'colChannel', numeric: false },
+    { key: 'channel',       label: 'ช่องทาง',     filterKey: 'colChannel',  numeric: false },
     { key: 'memo',          label: canEdit ? 'รายการ ✏' : 'รายการ', filterKey: 'colMemo', numeric: false },
     ...(role === ROLES.admin ? [{ key: 'remark', label: 'หมายเหตุ ✏', filterKey: 'colRemark', numeric: false }] : []),
   ]
@@ -957,21 +1014,21 @@ function TransactionTable({
           <thead>
             <tr>
               {columns.map(({ key, label, filterKey, numeric }) => (
-                  <SortableHeader
-                    key={key}
-                    col={key}
-                    label={label}
-                    sort={sort}
-                    onSort={onSort}
-                    numeric={numeric}
-                    filterValue={filterKey ? columnFilters[filterKey] : undefined}
-                    onFilterChange={filterKey ? val => onColumnFilterChange(filterKey, val) : undefined}
-                  />
+                <SortableHeader
+                  key={key}
+                  col={key}
+                  label={label}
+                  sort={sort}
+                  onSort={onSort}
+                  numeric={numeric}
+                  filterValue={filterKey ? columnFilters[filterKey] : undefined}
+                  onFilterChange={filterKey ? val => onColumnFilterChange(filterKey, val) : undefined}
+                />
               ))}
             </tr>
           </thead>
           <tbody>
-            {transactions.length === 0 ? (
+            {transactions.length === 0 && !isLoading ? (
               <tr>
                 <td colSpan={columns.length}>
                   <div className="empty-state">
@@ -995,50 +1052,21 @@ function TransactionTable({
             )}
           </tbody>
         </table>
+
+        <InfiniteScrollSentinel
+          hasMore={hasMore}
+          isFetchingMore={isFetchingMore}
+          onLoadMore={onLoadMore}
+          loadedCount={transactions.length}
+          totalCount={totalCount}
+        />
       </div>
-
-      {totalPages > 1 && (
-        <div className="pagination">
-          <div className="page-info">หน้า {page} จาก {totalPages} ({totalFiltered.toLocaleString('th-TH')} รายการ)</div>
-          <div className="page-btns">
-            <button
-              className="page-btn"
-              onClick={() => onPageChange(page - 1)}
-              disabled={page === 1}
-              aria-label="หน้าก่อนหน้า"
-            >‹</button>
-
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
-              .map((p, idx, arr) => (
-                <>
-                  {idx > 0 && arr[idx - 1] !== p - 1 && (
-                    <span key={`ellipsis-${p}`} style={{ padding: '0 0.3rem', color: 'var(--muted)', fontSize: '0.68rem' }}>…</span>
-                  )}
-                  <button
-                    key={p}
-                    className={`page-btn ${p === page ? 'page-btn-active' : ''}`}
-                    onClick={() => onPageChange(p)}
-                  >{p}</button>
-                </>
-              ))
-            }
-
-            <button
-              className="page-btn"
-              onClick={() => onPageChange(page + 1)}
-              disabled={page === totalPages}
-              aria-label="หน้าถัดไป"
-            >›</button>
-          </div>
-        </div>
-      )}
     </>
   )
 }
 
 // ─────────────────────────────────────────────────────────────
-// TransactionRow
+// TransactionRow (unchanged)
 // ─────────────────────────────────────────────────────────────
 function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, role }) {
   const raygan = tx['memo']
@@ -1052,9 +1080,7 @@ function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, 
   return (
     <tr className={isMissingMemo ? 'row-memo-missing' : ''}>
       <td>
-        <span className="cell-date">
-          {formatThaiDateTime(tx.tx_datetime)}
-        </span>
+        <span className="cell-date">{formatThaiDateTime(tx.tx_datetime)}</span>
       </td>
       <td><span className="cell-eff">{tx['effective_date'] ?? ''}</span></td>
       <td>
@@ -1110,7 +1136,7 @@ function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, 
 }
 
 // ─────────────────────────────────────────────────────────────
-// AppShell — the authenticated layout
+// AppShell
 // ─────────────────────────────────────────────────────────────
 function AppShell({ user, role, onLogout }) {
   const [importOpen, setImportOpen]                 = useState(false)
@@ -1119,20 +1145,15 @@ function AppShell({ user, role, onLogout }) {
   const [exporting, setExporting]                   = useState(false)
 
   const {
-    isLoading, filters, sort, page, setPage, transactions, totalCount,
-    totalPages, stats,
-    loadTransactions, handleSort, handleFilterChange,
+    isLoading, isFetchingMore, hasMore,
+    filters, sort,
+    transactions, totalCount,
+    stats,
+    loadMore, resetAndLoad,
+    handleSort, handleFilterChange,
     updateRayganLocally, updateRemarkLocally,
     exportAllTransactions,
   } = useTransactions(role)
-  
-  // Initial data load
-  useEffect(() => { loadTransactions() }, [loadTransactions])
-
-  const handlePageChange = p => {
-    setPage(p)
-    window.scrollTo(0, 0)
-  }
 
   const handleExport = async () => {
     setExporting(true)
@@ -1140,17 +1161,8 @@ function AppShell({ user, role, onLogout }) {
     setExporting(false)
   }
 
-  const handleRayganSaved = (id, value) => {
-    updateRayganLocally(id, value)
-  }
-
-  const handleRemarkSaved = (id, value) => {
-    updateRemarkLocally(id, value)
-  }
-
   return (
     <div style={{ minHeight: '100vh' }}>
-      {/* Header */}
       <header className="header">
         <div className="header-left">
           <div className="header-logo">บัญชี<span>รายการ</span></div>
@@ -1166,7 +1178,6 @@ function AppShell({ user, role, onLogout }) {
         </div>
       </header>
 
-      {/* Toolbar */}
       <Toolbar
         filters={filters}
         role={role}
@@ -1176,29 +1187,27 @@ function AppShell({ user, role, onLogout }) {
         exporting={exporting}
       />
 
-      {/* Stats */}
       <StatsBar stats={stats} role={role} />
 
-      {/* Ledger */}
       <main className="main">
         <div className="ledger-wrap">
           <div className="ledger-header">
             <div className="ledger-title">สมุดรายการธุรกรรม</div>
             <div className="ledger-count">
-              {totalCount.toLocaleString('th-TH')} รายการ
+              {transactions.length.toLocaleString('th-TH')} / {totalCount.toLocaleString('th-TH')} รายการ
             </div>
           </div>
 
           <TransactionTable
             transactions={transactions}
-            totalFiltered={totalCount}
+            totalCount={totalCount}
             isLoading={isLoading}
+            isFetchingMore={isFetchingMore}
+            hasMore={hasMore}
             sort={sort}
-            page={page}
-            totalPages={totalPages}
             role={role}
             onSort={handleSort}
-            onPageChange={handlePageChange}
+            onLoadMore={loadMore}
             onEditRaygan={setEditingTransaction}
             onEditRemark={setEditingRemark}
             columnFilters={filters}
@@ -1207,11 +1216,10 @@ function AppShell({ user, role, onLogout }) {
         </div>
       </main>
 
-      {/* Modals */}
       {importOpen && (
         <ImportModal
           onClose={() => setImportOpen(false)}
-          onImported={loadTransactions}
+          onImported={() => resetAndLoad()}
         />
       )}
 
@@ -1219,7 +1227,7 @@ function AppShell({ user, role, onLogout }) {
         <EditRayganModal
           transaction={editingTransaction}
           onClose={() => setEditingTransaction(null)}
-          onSaved={handleRayganSaved}
+          onSaved={updateRayganLocally}
         />
       )}
 
@@ -1227,9 +1235,11 @@ function AppShell({ user, role, onLogout }) {
         <EditRemarkModal
           transaction={editingRemark}
           onClose={() => setEditingRemark(null)}
-          onSaved={handleRemarkSaved}
+          onSaved={updateRemarkLocally}
         />
       )}
+
+      <ScrollToTopButton />
     </div>
   )
 }
@@ -1243,7 +1253,6 @@ function App() {
   const [ready, setReady] = useState(false)
   const addToast = useToast()
 
-  // Restore session on mount
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
@@ -1269,9 +1278,7 @@ function App() {
     setRole(data?.role ?? null)
   }
 
-  const handleLogin = async authUser => {
-    await resolveRole(authUser)
-  }
+  const handleLogin = async authUser => { await resolveRole(authUser) }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -1288,24 +1295,11 @@ function App() {
     )
   }
 
-  if (!user) {
-    return <AuthScreen onLogin={handleLogin} />
-  }
+  if (!user) return <AuthScreen onLogin={handleLogin} />
 
-  return (
-    <AppShell
-      user={user}
-      role={role}
-      onLogout={handleLogout}
-    />
-  )
+  return <AppShell user={user} role={role} onLogout={handleLogout} />
 }
 
-// ─────────────────────────────────────────────────────────────
-// Root — ToastProvider wraps the whole tree so every component
-// can call useToast(). This is the default export consumed by
-// main.jsx.
-// ─────────────────────────────────────────────────────────────
 function RootApp() {
   return (
     <ToastProvider>

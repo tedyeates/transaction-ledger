@@ -18,11 +18,15 @@
 /* ── Reset ─────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   font-family: var(--font-body);
   background: var(--paper);
   color: var(--ink);
-  min-height: 100vh;
   background-image: repeating-linear-gradient(
     0deg,
     transparent,
@@ -193,7 +197,7 @@ body {
 .toolbar {
   background: var(--ledger);
   border-bottom: 1px solid var(--rule);
-  padding: 0.65rem 1.75rem;
+  padding: 0.4rem 1.75rem;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -238,53 +242,82 @@ body {
   display: flex;
   flex-wrap: wrap;
 }
-.stat { padding: 0.9rem 2rem 0.9rem 0; border-right: 1px solid var(--rule); margin-right: 2rem; }
+.stat { padding: 0.45rem 2rem 0.45rem 0; border-right: 1px solid var(--rule); margin-right: 2rem; }
 .stat:last-child { border-right: none; }
 .stat-label {
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--muted);
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.1rem;
 }
 .stat-value {
   font-family: var(--font-serif);
-  font-size: 1.45rem;
+  font-size: 1.05rem;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
 .stat-value-withdraw   { color: var(--withdraw); }
-.stat-value-deposit  { color: var(--deposit); }
-.stat-value-neutral { color: var(--ink); }
+.stat-value-deposit    { color: var(--deposit); }
+.stat-value-neutral    { color: var(--ink); }
 
 /* ── Main / ledger ─────────────────────────────────────────── */
-.main { padding: 1.25rem 1.75rem 3rem; }
+.main {
+  padding: 0.75rem 1.75rem;
+  height: calc(100vh - 54px - 40px - 56px); /* header + toolbar + stats */
+  display: flex;
+  flex-direction: column;
+}
 .ledger-wrap {
   background: var(--ledger);
   border: 1px solid var(--rule);
-  overflow: hidden;
   box-shadow: 0 2px 12px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0; /* critical — lets flex child shrink below content size */
+  overflow: hidden;
 }
 .ledger-header {
-  padding: 0.85rem 1.25rem;
+  padding: 0.5rem 1.25rem;
   border-bottom: 2px solid var(--rule);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 .ledger-title { font-family: var(--font-serif); font-size: 0.95rem; font-weight: 600; }
 .ledger-count { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); }
 
 /* ── Table ─────────────────────────────────────────────────── */
-.table-scroll { overflow-x: auto; }
+
+/*
+ * Single scroll container approach:
+ * .table-scroll handles BOTH overflow-x and overflow-y.
+ * thead th uses position:sticky top:0 within that container.
+ * The InfiniteScrollSentinel sits inside .table-scroll at the bottom,
+ * so IntersectionObserver fires when the user reaches the end of this box.
+ */
+.table-scroll {
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0; /* critical — lets flex child scroll instead of expanding */
+}
+
 .table-loading {
   opacity: 0.5;
   pointer-events: none;
   transition: opacity 0.15s ease;
 }
 
-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
 thead th {
   background: var(--ink);
   color: var(--paper);
@@ -292,12 +325,14 @@ thead th {
   font-size: 0.6rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  padding: 0.6rem 0.85rem;
+  padding: 0.45rem 0.85rem;
   text-align: left;
   font-weight: 500;
   white-space: nowrap;
-  cursor: pointer;
   user-select: none;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 thead th:hover { background: var(--blue); }
 thead th.col-sorted { background: var(--blue); }
@@ -305,8 +340,9 @@ thead th.col-sorted { background: var(--blue); }
 tbody tr { border-bottom: 1px solid var(--rule); transition: background 0.1s; }
 tbody tr:hover { background: rgba(200, 150, 12, 0.04); }
 tbody tr:last-child { border-bottom: none; }
-td { padding: 0.6rem 0.85rem; vertical-align: middle; }
+td { padding: 0.3rem 0.85rem; vertical-align: middle; }
 
+/* ── Column header labels & filter inputs ──────────────────── */
 .th-label {
   white-space: nowrap;
   margin-bottom: 0.3rem;
@@ -317,25 +353,26 @@ td { padding: 0.6rem 0.85rem; vertical-align: middle; }
   width: 100%;
   font-size: 0.68rem;
   padding: 0.2rem 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--surface);
-  color: var(--text);
+  border: 1px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.08);
+  color: var(--paper);
   font-family: var(--font-mono);
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
 }
-
+.col-filter-input::placeholder { color: rgba(247,245,240,0.35); }
 .col-filter-input.col-filter-active {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  background: rgba(200,150,12,0.18);
 }
-
 .col-filter-input:focus {
-  outline: none;
   border-color: var(--accent);
+  background: rgba(255,255,255,0.13);
 }
 
+/* ── Cell types ────────────────────────────────────────────── */
 .cell-date    { font-family: var(--font-mono); font-size: 0.72rem; white-space: nowrap; }
-.cell-eff     { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); }
+.cell-eff     { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); white-space: nowrap; }
 .cell-desc    { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell-cheque  { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
 .cell-amt     { font-family: var(--font-mono); font-size: 0.88rem; font-weight: 500; white-space: nowrap; text-align: right; }
@@ -343,19 +380,16 @@ td { padding: 0.6rem 0.85rem; vertical-align: middle; }
 .cell-amt-deposit { color: var(--deposit); }
 .cell-balance { font-family: var(--font-mono); font-size: 0.82rem; text-align: right; white-space: nowrap; }
 .cell-channel { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); }
-.cell-raygan         { font-size: 0.72rem; color: var(--blue); letter-spacing: 0;}
-.cell-raygan-empty   { color: var(--muted);}
+.cell-raygan         { font-size: 0.72rem; color: var(--blue); letter-spacing: 0; }
+.cell-raygan-empty   { color: var(--muted); }
 
 /* Highlight rows missing a memo entry */
 tr.row-memo-missing {
   background-color: color-mix(in srgb, var(--withdraw) 8%, transparent);
 }
-
 tr.row-memo-missing:hover {
   background-color: color-mix(in srgb, var(--withdraw) 14%, transparent);
 }
-
-/* Make the "+ เพิ่ม" button stand out on highlighted rows */
 tr.row-memo-missing .cell-raygan-empty {
   color: var(--withdraw);
   font-weight: 600;
@@ -375,11 +409,57 @@ tr.row-memo-missing .cell-raygan-empty {
   border-top-color: var(--blue);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
-  margin-bottom: 0.6rem;
 }
+.spinner-sm { width: 14px; height: 14px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Pagination ────────────────────────────────────────────── */
+/* ── Infinite scroll sentinel ──────────────────────────────── */
+.infinite-sentinel {
+  padding: 1.5rem;
+  text-align: center;
+}
+.infinite-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+.infinite-end {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+/* ── Scroll-to-top button ──────────────────────────────────── */
+.scroll-to-top {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 150;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  border: 1px solid var(--rule);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  transition: background 0.15s, transform 0.15s;
+}
+.scroll-to-top:hover {
+  background: var(--blue);
+  transform: translateY(-2px);
+}
+
+/* ── Pagination (kept for reference) ──────────────────────── */
 .pagination {
   display: flex;
   align-items: center;
