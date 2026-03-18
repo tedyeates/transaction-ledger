@@ -234,30 +234,27 @@ function ToastProvider({ children }) {
 function useTransactions(role) {
   const [transactions, setTransactions] = useState([])
   const [totalCount, setTotalCount] = useState(0)
-  const [channels, setChannels] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [filters, setFilters] = useState({ search: '', type: '', channel: '', dateFrom: '', dateTo: '' })
   const [sort, setSort] = useState({ col: 'tx_datetime', dir: 'desc' })
   const [page, setPage] = useState(1)
   const [fullStats, setFullStats] = useState({ withdraws: 0, deposits: 0 })
+  const [latestBalance, setLatestBalance] = useState(null)
   const addToast = useToast()
+
+  useEffect(() => {
+    supabase
+      .rpc('get_latest_balance')
+      .then(({ data }) => {
+        if (data != null) setLatestBalance(data)
+      })
+  }, [])
 
   // Lock type filter for accountants
   useEffect(() => {
     if (role === ROLES.withdraw) setFilters(f => ({ ...f, type: 'withdrawal' }))
     if (role === ROLES.deposit) setFilters(f => ({ ...f, type: 'income' }))
   }, [role])
-
-  // Fetch channels once on mount for the filter dropdown
-  useEffect(() => {
-    supabase
-      .from('transactions')
-      .select('channel')
-      .neq('channel', null)
-      .then(({ data }) => {
-        if (data) setChannels([...new Set(data.map(r => r.channel))].sort())
-      })
-  }, [])
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -393,14 +390,15 @@ const loadTransactions = useCallback(async () => {
   const stats = {
     total:     totalCount,
     withdraws: fullStats.withdraws,
-    deposits:  fullStats.deposits,  
+    deposits:  fullStats.deposits, 
+    balance:   latestBalance,
   }
-
+  
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
 
   return {
-    isLoading, filters, sort, page, setPage,
-    channels, transactions, totalCount,
+    isLoading, filters, sort, page, setPage, 
+    transactions, totalCount,
     totalPages, stats,
     loadTransactions, handleSort, handleFilterChange,
     updateRayganLocally, updateRemarkLocally,
@@ -567,12 +565,20 @@ function StatsBar({ stats, role }) {
       )}
 
       {role === ROLES.admin && (
-        <div className="stat">
-          <div className="stat-label">ยอดสุทธิ</div>
-          <div className="stat-value" style={{ color: netColor }}>
-            {net >= 0 ? '+' : '-'}{formatBaht(Math.abs(net))}
+        <>
+          <div className="stat">
+            <div className="stat-label">Total gain</div>
+            <div className="stat-value" style={{ color: netColor }}>
+              {net >= 0 ? '+' : '-'}{formatBaht(Math.abs(net))}
+            </div>
           </div>
-        </div>
+          <div className="stat">
+            <div className="stat-label">ยอดคงเหลือปัจจุบัน</div>
+            <div className="stat-value" style={{ color: 'var(--deposit)' }}>
+              {formatBaht(stats.balance)}
+            </div>
+          </div>
+        </>
       )}
     </div>
   )
@@ -581,7 +587,7 @@ function StatsBar({ stats, role }) {
 // ─────────────────────────────────────────────────────────────
 // Toolbar
 // ─────────────────────────────────────────────────────────────
-function Toolbar({ filters, channels, role, onFilterChange, onImportClick, onExportClick, exporting }) {
+function Toolbar({ filters, role, onFilterChange, onImportClick, onExportClick, exporting }) {
   const isAccountant = role !== ROLES.admin
 
   return (
@@ -609,16 +615,6 @@ function Toolbar({ filters, channels, role, onFilterChange, onImportClick, onExp
         <option value="">ทุกประเภท</option>
         <option value="withdrawal">หักบัญชี</option>
         <option value="income">เข้าบัญชี</option>
-      </select>
-
-      <select
-        className="filter-select"
-        value={filters.channel}
-        onChange={e => onFilterChange({ channel: e.target.value })}
-        aria-label="กรองช่องทาง"
-      >
-        <option value="">ทุกช่องทาง</option>
-        {channels.map(c => <option key={c} value={c}>{c}</option>)}
       </select>
 
       <input
@@ -1088,8 +1084,7 @@ function AppShell({ user, role, onLogout }) {
   const [exporting, setExporting]                   = useState(false)
 
   const {
-    isLoading, filters, sort, page, setPage,
-    channels, transactions, totalCount,
+    isLoading, filters, sort, page, setPage, transactions, totalCount,
     totalPages, stats,
     loadTransactions, handleSort, handleFilterChange,
     updateRayganLocally, updateRemarkLocally,
@@ -1139,7 +1134,6 @@ function AppShell({ user, role, onLogout }) {
       {/* Toolbar */}
       <Toolbar
         filters={filters}
-        channels={channels}
         role={role}
         onFilterChange={handleFilterChange}
         onImportClick={() => setImportOpen(true)}
