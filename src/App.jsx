@@ -114,6 +114,16 @@ function exportToCSV(transactions) {
   URL.revokeObjectURL(url)
 }
 
+// Add this hook near the top of the file
+function useDebounce(value, delay) {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+  return debounced
+}
+
 /**
  * Split a single CSV line, respecting double-quoted fields.
  */
@@ -235,12 +245,32 @@ function useTransactions(role) {
   const [transactions, setTransactions] = useState([])
   const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
-  const [filters, setFilters] = useState({ search: '', type: '', channel: '', dateFrom: '', dateTo: '' })
+  const [filters, setFilters] = useState({
+    search: '', type: '', channel: '', dateFrom: '', dateTo: '',
+    colDesc: '', colCheque: '', colMemo: '', colRemark: '',
+    colChannel: '', colWithdraw: '', colDeposit: '', colBalance: '',
+  })
   const [sort, setSort] = useState({ col: 'tx_datetime', dir: 'desc' })
   const [page, setPage] = useState(1)
   const [fullStats, setFullStats] = useState({ withdraws: 0, deposits: 0 })
   const [latestBalance, setLatestBalance] = useState(null)
   const addToast = useToast()
+
+  const buildFilterParams = useCallback(() => ({
+    p_type:        filters.type        || null,
+    p_channel:     filters.channel     || null,
+    p_date_from:   filters.dateFrom    || null,
+    p_date_to:     filters.dateTo ? filters.dateTo + 'T23:59:59' : null,
+    p_search:      filters.search      || null,
+    p_desc:        filters.colDesc     || null,
+    p_cheque:      filters.colCheque   || null,
+    p_memo:        filters.colMemo     || null,
+    p_remark:      filters.colRemark   || null,
+    p_col_channel: filters.colChannel  || null,
+    p_withdraw:    filters.colWithdraw ? Number(filters.colWithdraw) : null,
+    p_deposit:     filters.colDeposit  ? Number(filters.colDeposit)  : null,
+    p_balance:     filters.colBalance  ? Number(filters.colBalance)  : null,
+  }), [filters])
 
   useEffect(() => {
     supabase
@@ -258,13 +288,7 @@ function useTransactions(role) {
 
   useEffect(() => {
     const fetchStats = async () => {
-      const { data, error } = await supabase.rpc('get_transaction_stats', {
-        p_type:      filters.type      || null,
-        p_channel:   filters.channel   || null,
-        p_date_from: filters.dateFrom  || null,
-        p_date_to:   filters.dateTo ? filters.dateTo + 'T23:59:59' : null,
-        p_search:    filters.search    || null,
-      })
+      const { data, error } = await supabase.rpc('get_transaction_stats_v2', buildFilterParams())
       if (data?.[0]) {
         setFullStats({
           withdraws: Number(data[0].total_withdraws),
@@ -273,24 +297,12 @@ function useTransactions(role) {
       }
     }
     fetchStats()
-  }, [filters])
+  }, [buildFilterParams])
 
 const loadTransactions = useCallback(async () => {
   setIsLoading(true)
 
-  let query = supabase
-    .rpc('get_transactions', {}, { count: 'exact' })
-
-  // Apply filters
-  if (filters.type)     query = query.eq('type', filters.type)
-  if (filters.channel)  query = query.eq('channel', filters.channel)
-  if (filters.dateFrom) query = query.gte('tx_datetime', filters.dateFrom)
-  if (filters.dateTo)   query = query.lte('tx_datetime', filters.dateTo + 'T23:59:59')
-  if (filters.search) {
-    query = query.or(
-      `description.ilike.%${filters.search}%,memo.ilike.%${filters.search}%,cheque_number.ilike.%${filters.search}%,channel.ilike.%${filters.search}%`
-    )
-  }
+  let query = supabase.rpc('get_transactions_v2', buildFilterParams(), { count: 'exact' })
 
   query = query
     .order(sort.col, { ascending: sort.dir === 'asc' })
@@ -306,7 +318,7 @@ const loadTransactions = useCallback(async () => {
     setTotalCount(count ?? 0)
   }
   setIsLoading(false)
-}, [addToast, filters, sort, page])
+}, [addToast, buildFilterParams, sort, page])
 
   // Reload whenever filters, sort or page change
   useEffect(() => {
@@ -346,19 +358,7 @@ const loadTransactions = useCallback(async () => {
 
     while (hasMore) {
       let query = supabase
-        .rpc('get_transactions')
-
-      if (filters.type)     query = query.eq('type', filters.type)
-      if (filters.channel)  query = query.eq('channel', filters.channel)
-      if (filters.dateFrom) query = query.gte('tx_datetime', filters.dateFrom)
-      if (filters.dateTo)   query = query.lte('tx_datetime', filters.dateTo + 'T23:59:59')
-      if (filters.search) {
-        query = query.or(
-          `description.ilike.%${filters.search}%,memo.ilike.%${filters.search}%,cheque_number.ilike.%${filters.search}%,channel.ilike.%${filters.search}%`
-        )
-      }
-
-      query = query
+        .rpc('get_transactions_v2', buildFilterParams())
         .order(sort.col, { ascending: sort.dir === 'asc' })
         .range(from, from + EXPORT_CHUNK - 1)
 
@@ -385,7 +385,7 @@ const loadTransactions = useCallback(async () => {
 
     exportToCSV(allRows)
     addToast(`ส่งออก ${allRows.length.toLocaleString('th-TH')} รายการเรียบร้อย`, 'success')
-  }, [addToast, filters, sort])
+  }, [addToast, buildFilterParams, sort])
 
   const stats = {
     total:     totalCount,
@@ -440,16 +440,48 @@ function Modal({ title, onClose, footer, size, children }) {
   )
 }
 
-function SortableHeader({ col, label, sort, onSort }) {
+function SortableHeader({ col, label, sort, onSort, filterValue, onFilterChange, numeric }) {
   const isActive = sort.col === col
+  const hasFilter = filterValue && filterValue.length > 0
   const arrow = isActive ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : ''
+
+  const [localValue, setLocalValue] = useState(filterValue ?? '')
+  const debouncedValue = useDebounce(localValue, 400)
+
+  useEffect(() => {
+    if (debouncedValue !== filterValue) {
+      onFilterChange?.(debouncedValue)
+    }
+  }, [debouncedValue])
+
+  useEffect(() => {
+    if (filterValue === '' && localValue !== '') {
+      setLocalValue('')
+    }
+  }, [filterValue])
+
+  const handleChange = e => {
+    const val = numeric
+      ? e.target.value.replace(/[^0-9.]/g, '')
+      : e.target.value
+    setLocalValue(val)
+  }
+
   return (
-    <th
-      onClick={() => onSort(col)}
-      className={isActive ? 'col-sorted' : ''}
-      aria-sort={isActive ? sort.dir : 'none'}
-    >
-      {label}{arrow}
+    <th className={isActive ? 'col-sorted' : ''}>
+      <div className="th-label" onClick={() => onSort(col)} style={{ cursor: 'pointer' }}>
+        {label}{arrow}
+      </div>
+      {onFilterChange && (
+        <input
+          className={`col-filter-input ${hasFilter ? 'col-filter-active' : ''}`}
+          value={localValue}
+          onChange={handleChange}
+          onClick={e => e.stopPropagation()}
+          placeholder="ค้นหา…"
+          inputMode={numeric ? 'decimal' : 'text'}
+        />
+      )}
     </th>
   )
 }
@@ -901,63 +933,66 @@ function TransactionTable({
   transactions, totalFiltered, isLoading,
   sort, page, totalPages,
   role, onSort, onPageChange, onEditRaygan, onEditRemark,
+  columnFilters, onColumnFilterChange,
 }) {
   const canEdit = role !== ROLES.admin
 
   const columns = [
     { key: 'tx_datetime', label: 'วันที่ทำรายการ' },
     { key: 'effective_date',     label: 'วันที่มีผล' },
-    { key: 'description',       label: 'คำอธิบาย' },
-    { key: 'cheque_number',     label: 'เลขที่เช็ค' },
-    { key: 'withdraw',       label: 'หักบัญชี' },
-    { key: 'deposit',      label: 'เข้าบัญชี' },
-    ...(role === ROLES.admin ? [{ key: 'balance', label: 'ยอดคงเหลือ' }] : []),
-    { key: 'channel', label: 'ช่องทาง' },
-    { key: 'memo',          label: canEdit ? 'รายการ ✏' : 'รายการ' },
-    ...(role === ROLES.admin ? [{ key: 'remark', label: 'หมายเหตุ ✏' }] : []),
+    { key: 'description',       label: 'คำอธิบาย', filterKey: 'colDesc', numeric: false },
+    { key: 'cheque_number',     label: 'เลขที่เช็ค', filterKey: 'colCheque', numeric: false },
+    { key: 'withdraw',       label: 'หักบัญชี', filterKey: 'colWithdraw', numeric: true },
+    { key: 'deposit',      label: 'เข้าบัญชี', filterKey: 'colDeposit', numeric: true },
+    ...(role === ROLES.admin ? [{ key: 'balance', label: 'ยอดคงเหลือ', filterKey: 'colBalance', numeric: true }] : []),
+    { key: 'channel', label: 'ช่องทาง', filterKey: 'colChannel', numeric: false },
+    { key: 'memo',          label: canEdit ? 'รายการ ✏' : 'รายการ', filterKey: 'colMemo', numeric: false },
+    ...(role === ROLES.admin ? [{ key: 'remark', label: 'หมายเหตุ ✏', filterKey: 'colRemark', numeric: false }] : []),
   ]
-
-  if (isLoading) {
-    return (
-      <div className="loading-state">
-        <Spinner />
-        <br />กำลังโหลด…
-      </div>
-    )
-  }
-
-  if (!transactions.length) {
-    return (
-      <div className="empty-state">
-        <div className="empty-icon">📒</div>
-        <div className="empty-text">ไม่พบรายการธุรกรรม</div>
-        <div className="empty-sub">ลองปรับตัวกรองหรือนำเข้าไฟล์ CSV</div>
-      </div>
-    )
-  }
 
   return (
     <>
-      <div className="table-scroll">
+      <div className={`table-scroll ${isLoading ? 'table-loading' : ''}`}>
         <table>
           <thead>
             <tr>
-              {columns.map(({ key, label }) => (
-                <SortableHeader key={key} col={key} label={label} sort={sort} onSort={onSort} />
+              {columns.map(({ key, label, filterKey, numeric }) => (
+                  <SortableHeader
+                    key={key}
+                    col={key}
+                    label={label}
+                    sort={sort}
+                    onSort={onSort}
+                    numeric={numeric}
+                    filterValue={filterKey ? columnFilters[filterKey] : undefined}
+                    onFilterChange={filterKey ? val => onColumnFilterChange(filterKey, val) : undefined}
+                  />
               ))}
             </tr>
           </thead>
           <tbody>
-            {transactions.map(tx => (
-              <TransactionRow
-                key={tx.id}
-                transaction={tx}
-                canEdit={canEdit}
-                onEditRaygan={onEditRaygan}
-                onEditRemark={onEditRemark}
-                role={role}
-              />
-            ))}
+            {transactions.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length}>
+                  <div className="empty-state">
+                    <div className="empty-icon">📒</div>
+                    <div className="empty-text">ไม่พบรายการธุรกรรม</div>
+                    <div className="empty-sub">ลองปรับตัวกรองหรือนำเข้าไฟล์ CSV</div>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              transactions.map(tx => (
+                <TransactionRow
+                  key={tx.id}
+                  transaction={tx}
+                  canEdit={canEdit}
+                  onEditRaygan={onEditRaygan}
+                  onEditRemark={onEditRemark}
+                  role={role}
+                />
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -1166,6 +1201,8 @@ function AppShell({ user, role, onLogout }) {
             onPageChange={handlePageChange}
             onEditRaygan={setEditingTransaction}
             onEditRemark={setEditingRemark}
+            columnFilters={filters}
+            onColumnFilterChange={(key, val) => handleFilterChange({ [key]: val })}
           />
         </div>
       </main>

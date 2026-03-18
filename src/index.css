@@ -278,6 +278,12 @@ body {
 
 /* ── Table ─────────────────────────────────────────────────── */
 .table-scroll { overflow-x: auto; }
+.table-loading {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
 table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
 thead th {
   background: var(--ink);
@@ -300,6 +306,33 @@ tbody tr { border-bottom: 1px solid var(--rule); transition: background 0.1s; }
 tbody tr:hover { background: rgba(200, 150, 12, 0.04); }
 tbody tr:last-child { border-bottom: none; }
 td { padding: 0.6rem 0.85rem; vertical-align: middle; }
+
+.th-label {
+  white-space: nowrap;
+  margin-bottom: 0.3rem;
+  cursor: pointer;
+}
+
+.col-filter-input {
+  width: 100%;
+  font-size: 0.68rem;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.col-filter-input.col-filter-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.col-filter-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
 
 .cell-date    { font-family: var(--font-mono); font-size: 0.72rem; white-space: nowrap; }
 .cell-eff     { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); }
