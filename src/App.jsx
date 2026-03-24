@@ -304,6 +304,7 @@ function useTransactions(role) {
     const { data, error, count } = await supabase
       .rpc('get_transactions_v2', params, { count: 'exact' })
       .order(newSort.col, { ascending: newSort.dir === 'asc' })
+      .order('id', { ascending: newSort.dir !== 'asc' }) 
       .range(0, PAGE_SIZE - 1)
 
     if (error) {
@@ -331,6 +332,7 @@ function useTransactions(role) {
     const { data, error, count } = await supabase
       .rpc('get_transactions_v2', params, { count: 'exact' })
       .order(currentSort.col, { ascending: currentSort.dir === 'asc' })
+      .order('id', { ascending: currentSort.dir !== 'asc' })
       .range(from, to)
 
     if (error) {
