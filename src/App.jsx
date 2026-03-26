@@ -388,6 +388,7 @@ function useTransactions(role) {
       const { data, error } = await supabase
         .rpc('get_transactions_v2', buildFilterParams())
         .order(sort.col, { ascending: sort.dir === 'asc' })
+        .order('id', { ascending: sort.dir !== 'asc' })
         .range(from, from + EXPORT_CHUNK - 1)
       if (error) { addToast(error.message, 'error'); return }
       allRows = [...allRows, ...(data ?? [])]
