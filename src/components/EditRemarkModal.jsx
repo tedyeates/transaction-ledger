@@ -1,0 +1,56 @@
+import { useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { useToast } from '../hooks/useToast'
+import { Modal } from './Modal'
+
+export function EditRemarkModal({ transaction, onClose, onSaved }) {
+  const [value, setValue]   = useState(transaction.remark ?? '')
+  const [error, setError]   = useState('')
+  const [saving, setSaving] = useState(false)
+  const addToast = useToast()
+
+  const handleSave = async () => {
+    setError('')
+    setSaving(true)
+    const { error: sbError } = await supabase
+      .rpc('update_remark', { tx_id: transaction.id, new_remark: value.trim() || null })
+    setSaving(false)
+    if (sbError) { console.error('Remark error:', sbError); setError(sbError.message); return }
+    addToast('บันทึกหมายเหตุเรียบร้อย', 'success')
+    onSaved(transaction.id, value.trim())
+    onClose()
+  }
+
+  return (
+    <Modal
+      title="แก้ไขหมายเหตุ"
+      size="sm"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>ยกเลิก</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+            {saving ? 'กำลังบันทึก…' : 'บันทึก'}
+          </button>
+        </>
+      }
+    >
+      <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--muted)', marginBottom: '1rem', lineHeight: 1.6, whiteSpace: 'pre-line' }}>
+        {`วันที่: ${transaction.tx_datetime}\nคำอธิบาย: ${transaction.description ?? '—'}`}
+      </p>
+      <div className="field">
+        <label htmlFor="remark-input">หมายเหตุ (สำหรับผู้บริหาร)</label>
+        <textarea
+          id="remark-input"
+          rows={3}
+          placeholder="ระบุหมายเหตุ…"
+          style={{ resize: 'vertical' }}
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          autoFocus
+        />
+      </div>
+      {error && <div className="error-msg" role="alert">{error}</div>}
+    </Modal>
+  )
+}
