@@ -3,4 +3,5 @@
 - **Frontend first.** Build complete UI against mock data before any backend code. User must approve frontend before backend begins.
 - **Local only.** Never depend on cloud services during development. 
 - **Keep mock/real interface identical** so the swap is seamless.
-- **Real tests** tests should only mock third party apis. Frontend tests should focus on front end displays with mock data. Backend tests should test the api and database functions, tests should use local database and not mock database calls.
+- **Mock only Third Party** The only acceptable mock target is the external API. Everything else (DB, validation, routing, CORS) runs real locally.
+- **Testing is not optional**

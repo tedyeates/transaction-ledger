@@ -40,40 +40,40 @@ Add row highlighting to transaction ledger. Database migration adds `is_highligh
     - **Property 2: Non-Admin Rejection**
     - **Validates: Requirements 2.3, 3.4**
 
-- [ ] 4. Frontend — TransactionRow highlight display and controls
-  - [ ] 4.1 Add highlight CSS class and styles
+- [x] 4. Frontend — TransactionRow highlight display and controls
+  - [x] 4.1 Add highlight CSS class and styles
     - Add `.row-highlighted` class to `src/index.css` with background color and left border accent
     - In `TransactionRow.jsx`, apply `row-highlighted` class to `<tr>` when `tx.is_highlighted === true`
     - Ensure both `row-highlighted` and `row-memo-missing` can coexist on same row
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-  - [ ] 4.2 Add admin-only highlight toggle control to TransactionRow
+  - [x] 4.2 Add admin-only highlight toggle control to TransactionRow
     - Show highlight toggle button/icon only when `role === ROLES.admin`
     - Hide toggle for withdrawal and income users
     - Button calls `onToggleHighlight(tx.id, !tx.is_highlighted)` on click
     - Disable button while RPC call in-flight for that row
     - _Requirements: 5.1, 5.2, 5.3, 5.5_
 
-  - [ ]* 4.3 Write unit tests for TransactionRow highlight behavior
+  - [x] 4.3 Write unit tests for TransactionRow highlight behavior
     - Test highlight class applied when `is_highlighted` true
     - Test highlight class absent when `is_highlighted` false/null/undefined
     - Test toggle button visible for admin, hidden for other roles
     - _Requirements: 4.1, 4.2, 5.1, 5.2_
 
 - [ ] 5. Frontend — wire highlight handler through component tree
-  - [ ] 5.1 Pass highlight handler from App through TransactionTable to TransactionRow
+  - [~] 5.1 Pass highlight handler from App through TransactionTable to TransactionRow
     - In `App.jsx`, create handler that calls `updateHighlightLocally` then `toggleHighlight`
     - Add `onToggleHighlight` prop to `TransactionTable.jsx`
     - Pass `onToggleHighlight` down to each `TransactionRow`
     - _Requirements: 5.3_
 
-  - [ ]* 5.2 Write integration tests for highlight toggle flow
+  - [ ] 5.2 Write integration tests for highlight toggle flow
     - Test optimistic update applies immediately
     - Test rollback on RPC error
     - Test error toast shown on failure
     - _Requirements: 5.3, 5.4_
 
-- [ ] 6. Final checkpoint — all highlight functionality complete
+- [~] 6. Final checkpoint — all highlight functionality complete
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
