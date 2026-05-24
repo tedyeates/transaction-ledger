@@ -21,33 +21,33 @@ Add row highlighting to transaction ledger. Database migration adds `is_highligh
     - Confirm `get_transactions_v2` includes `is_highlighted` in response (auto-included since RETURNS SETOF transactions)
     - _Requirements: 1.2, 6.1, 6.2, 6.3_
 
-- [~] 2. Checkpoint — database layer verified
+- [x] 2. Checkpoint — database layer verified
   - Ensure migration applies cleanly, ask the user if questions arise.
 
-- [ ] 3. Frontend — useTransactions hook highlight logic
-  - [~] 3.1 Add `toggleHighlight` function to `useTransactions` hook
+- [x] 3. Frontend — useTransactions hook highlight logic
+  - [x] 3.1 Add `toggleHighlight` function to `useTransactions` hook
     - Add async `toggleHighlight(ids, highlighted)` that calls `supabase.rpc('toggle_highlight', { tx_ids: ids, highlighted })`
     - Add `updateHighlightLocally(ids, value)` to optimistically update transaction state in local data
     - On RPC error, revert local state and show error toast via `addToast`
     - Export `toggleHighlight` from hook
     - _Requirements: 5.3, 5.4, 5.5_
 
-  - [ ]* 3.2 Write property test for admin toggle state update
+  - [x]* 3.2 Write property test for admin toggle state update
     - **Property 1: Admin Toggle Updates State**
     - **Validates: Requirements 2.2, 3.2**
 
-  - [ ]* 3.3 Write property test for non-admin rejection
+  - [x]* 3.3 Write property test for non-admin rejection
     - **Property 2: Non-Admin Rejection**
     - **Validates: Requirements 2.3, 3.4**
 
 - [ ] 4. Frontend — TransactionRow highlight display and controls
-  - [~] 4.1 Add highlight CSS class and styles
+  - [ ] 4.1 Add highlight CSS class and styles
     - Add `.row-highlighted` class to `src/index.css` with background color and left border accent
     - In `TransactionRow.jsx`, apply `row-highlighted` class to `<tr>` when `tx.is_highlighted === true`
     - Ensure both `row-highlighted` and `row-memo-missing` can coexist on same row
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-  - [~] 4.2 Add admin-only highlight toggle control to TransactionRow
+  - [ ] 4.2 Add admin-only highlight toggle control to TransactionRow
     - Show highlight toggle button/icon only when `role === ROLES.admin`
     - Hide toggle for withdrawal and income users
     - Button calls `onToggleHighlight(tx.id, !tx.is_highlighted)` on click
@@ -61,7 +61,7 @@ Add row highlighting to transaction ledger. Database migration adds `is_highligh
     - _Requirements: 4.1, 4.2, 5.1, 5.2_
 
 - [ ] 5. Frontend — wire highlight handler through component tree
-  - [~] 5.1 Pass highlight handler from App through TransactionTable to TransactionRow
+  - [ ] 5.1 Pass highlight handler from App through TransactionTable to TransactionRow
     - In `App.jsx`, create handler that calls `updateHighlightLocally` then `toggleHighlight`
     - Add `onToggleHighlight` prop to `TransactionTable.jsx`
     - Pass `onToggleHighlight` down to each `TransactionRow`
@@ -73,12 +73,11 @@ Add row highlighting to transaction ledger. Database migration adds `is_highligh
     - Test error toast shown on failure
     - _Requirements: 5.3, 5.4_
 
-- [~] 6. Final checkpoint — all highlight functionality complete
+- [ ] 6. Final checkpoint — all highlight functionality complete
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
 
-- Tasks marked with `*` are optional and can be skipped for faster MVP
 - Each task references specific requirements for traceability
 - Checkpoints ensure incremental validation
 - Property tests validate universal correctness properties from design document
