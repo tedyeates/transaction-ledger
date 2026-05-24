@@ -60,20 +60,20 @@ Add row highlighting to transaction ledger. Database migration adds `is_highligh
     - Test toggle button visible for admin, hidden for other roles
     - _Requirements: 4.1, 4.2, 5.1, 5.2_
 
-- [ ] 5. Frontend — wire highlight handler through component tree
-  - [~] 5.1 Pass highlight handler from App through TransactionTable to TransactionRow
+- [x] 5. Frontend — wire highlight handler through component tree
+  - [x] 5.1 Pass highlight handler from App through TransactionTable to TransactionRow
     - In `App.jsx`, create handler that calls `updateHighlightLocally` then `toggleHighlight`
     - Add `onToggleHighlight` prop to `TransactionTable.jsx`
     - Pass `onToggleHighlight` down to each `TransactionRow`
     - _Requirements: 5.3_
 
-  - [ ] 5.2 Write integration tests for highlight toggle flow
+  - [x] 5.2 Write integration tests for highlight toggle flow
     - Test optimistic update applies immediately
     - Test rollback on RPC error
     - Test error toast shown on failure
     - _Requirements: 5.3, 5.4_
 
-- [~] 6. Final checkpoint — all highlight functionality complete
+- [x] 6. Final checkpoint — all highlight functionality complete
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

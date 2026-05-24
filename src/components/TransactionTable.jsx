@@ -5,7 +5,7 @@ import { TransactionRow } from './TransactionRow'
 
 export function TransactionTable({
   transactions, totalCount, isLoading, isFetchingMore, hasMore,
-  sort, role, onSort, onLoadMore, onEditRaygan, onEditRemark,
+  sort, role, onSort, onLoadMore, onEditRaygan, onEditRemark, onToggleHighlight,
   columnFilters, onColumnFilterChange,
 }) {
   const canEdit = role !== ROLES.admin
@@ -64,6 +64,7 @@ export function TransactionTable({
                   canEdit={canEdit}
                   onEditRaygan={onEditRaygan}
                   onEditRemark={onEditRemark}
+                  onToggleHighlight={onToggleHighlight}
                   role={role}
                 />
               ))

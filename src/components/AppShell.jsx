@@ -23,8 +23,14 @@ export function AppShell({ user, role, onLogout }) {
     loadMore, resetAndLoad,
     handleSort, handleFilterChange,
     updateRayganLocally, updateRemarkLocally,
+    updateHighlightLocally, toggleHighlight,
     exportAllTransactions,
   } = useTransactions(role)
+
+  const handleToggleHighlight = async (id, highlighted) => {
+    updateHighlightLocally([id], highlighted)
+    await toggleHighlight([id], highlighted)
+  }
 
   const handleExport = async () => {
     setExporting(true)
@@ -81,6 +87,7 @@ export function AppShell({ user, role, onLogout }) {
             onLoadMore={loadMore}
             onEditRaygan={setEditingTransaction}
             onEditRemark={setEditingRemark}
+            onToggleHighlight={handleToggleHighlight}
             columnFilters={filters}
             onColumnFilterChange={(key, val) => handleFilterChange({ [key]: val })}
           />
