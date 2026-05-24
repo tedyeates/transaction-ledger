@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useDebounce } from '../hooks/useDebounce'
 
-export function SortableHeader({ col, label, sort, onSort, filterValue, onFilterChange, numeric }) {
+export function SortableHeader({ col, label, sort, onSort, filterValue, onFilterChange, numeric, className }) {
   const isActive = sort.col === col
   const hasFilter = filterValue && filterValue.length > 0
   const arrow = isActive ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : ''
@@ -23,7 +23,7 @@ export function SortableHeader({ col, label, sort, onSort, filterValue, onFilter
   }
 
   return (
-    <th className={isActive ? 'col-sorted' : ''}>
+    <th className={[isActive ? 'col-sorted' : '', className].filter(Boolean).join(' ')}>
       <div className="th-label" onClick={() => onSort(col)} style={{ cursor: 'pointer' }}>
         {label}{arrow}
       </div>

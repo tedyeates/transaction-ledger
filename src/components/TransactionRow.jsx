@@ -1,7 +1,19 @@
+import { useState } from 'react'
 import { ROLES } from '../lib/constants'
 import { formatBaht, formatThaiDateTime } from '../lib/utils'
 
-export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, role }) {
+export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, onToggleHighlight, role }) {
+  const [highlightInFlight, setHighlightInFlight] = useState(false)
+  const handleToggleHighlight = async () => {
+    if (!onToggleHighlight || highlightInFlight) return
+    setHighlightInFlight(true)
+    try {
+      await onToggleHighlight(tx.id, !tx.is_highlighted)
+    } finally {
+      setHighlightInFlight(false)
+    }
+  }
+
   const raygan = tx['memo']
 
   const isMissingMemo =
@@ -10,8 +22,13 @@ export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditR
      (role === ROLES.deposit  && tx.type === 'income')) &&
     !raygan
 
+  const rowClasses = [
+    tx.is_highlighted === true && 'row-highlighted',
+    isMissingMemo && 'row-memo-missing',
+  ].filter(Boolean).join(' ')
+
   return (
-    <tr className={isMissingMemo ? 'row-memo-missing' : ''}>
+    <tr className={rowClasses}>
       <td>
         <span className="cell-date">{formatThaiDateTime(tx.tx_datetime)}</span>
       </td>
@@ -61,6 +78,19 @@ export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditR
               ? <span className="cell-raygan">{tx.remark}</span>
               : <span className="cell-raygan-empty">+ เพิ่ม</span>
             }
+          </button>
+        </td>
+      )}
+      {role === ROLES.admin && (
+        <td className="cell-highlight-toggle">
+          <button
+            className="btn btn-ghost btn-sm btn-highlight-toggle"
+            onClick={handleToggleHighlight}
+            disabled={highlightInFlight}
+            title={tx.is_highlighted ? 'ยกเลิกไฮไลท์' : 'ไฮไลท์'}
+            aria-label={tx.is_highlighted ? 'Remove highlight' : 'Add highlight'}
+          >
+            {tx.is_highlighted ? '★' : '☆'}
           </button>
         </td>
       )}

@@ -144,6 +144,24 @@ export function useTransactions(role) {
     setTransactions(prev => prev.map(tx => tx.id === id ? { ...tx, remark: value || null } : tx))
   }, [])
 
+  const updateHighlightLocally = useCallback((ids, value) => {
+    const idSet = new Set(ids)
+    setTransactions(prev => prev.map(tx => idSet.has(tx.id) ? { ...tx, is_highlighted: value } : tx))
+  }, [])
+
+  const toggleHighlight = useCallback(async (ids, highlighted) => {
+    // Optimistic update
+    updateHighlightLocally(ids, highlighted)
+
+    const { error } = await supabase.rpc('toggle_highlight', { tx_ids: ids, highlighted })
+
+    if (error) {
+      // Revert on failure
+      updateHighlightLocally(ids, !highlighted)
+      addToast(error.message, 'error')
+    }
+  }, [updateHighlightLocally, addToast])
+
   const exportAllTransactions = useCallback(async () => {
     const EXPORT_CHUNK = 1000
     let allRows = []
@@ -181,6 +199,7 @@ export function useTransactions(role) {
     loadMore, resetAndLoad,
     handleSort, handleFilterChange,
     updateRayganLocally, updateRemarkLocally,
+    updateHighlightLocally, toggleHighlight,
     exportAllTransactions,
   }
 }
