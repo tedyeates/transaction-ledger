@@ -21,6 +21,7 @@ export function TransactionTable({
     { key: 'channel',       label: 'ช่องทาง',     filterKey: 'colChannel',  numeric: false },
     { key: 'memo',          label: canEdit ? 'รายการ ✏' : 'รายการ', filterKey: 'colMemo', numeric: false },
     ...(role === ROLES.admin ? [{ key: 'remark', label: 'หมายเหตุ ✏', filterKey: 'colRemark', numeric: false }] : []),
+    ...(role === ROLES.admin ? [{ key: 'highlight', label: '★', className: 'col-highlight' }] : []),
   ]
 
   return (
@@ -29,7 +30,7 @@ export function TransactionTable({
         <table>
           <thead>
             <tr>
-              {columns.map(({ key, label, filterKey, numeric }) => (
+              {columns.map(({ key, label, filterKey, numeric, className }) => (
                 <SortableHeader
                   key={key}
                   col={key}
@@ -37,6 +38,7 @@ export function TransactionTable({
                   sort={sort}
                   onSort={onSort}
                   numeric={numeric}
+                  className={className}
                   filterValue={filterKey ? columnFilters[filterKey] : undefined}
                   onFilterChange={filterKey ? val => onColumnFilterChange(filterKey, val) : undefined}
                 />

@@ -383,6 +383,19 @@ td { padding: 0.3rem 0.85rem; vertical-align: middle; }
 .cell-raygan         { font-size: 0.72rem; color: var(--blue); letter-spacing: 0; }
 .cell-raygan-empty   { color: var(--muted); }
 
+/* Highlight toggle column — center star in header and body */
+.cell-highlight-toggle { text-align: center; }
+th.col-highlight { text-align: center; }
+
+/* Highlight rows flagged by admin */
+tr.row-highlighted {
+  background-color: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-left: 3px solid var(--accent);
+}
+tr.row-highlighted:hover {
+  background-color: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
 /* Highlight rows missing a memo entry */
 tr.row-memo-missing {
   background-color: color-mix(in srgb, var(--withdraw) 8%, transparent);
@@ -393,6 +406,15 @@ tr.row-memo-missing:hover {
 tr.row-memo-missing .cell-raygan-empty {
   color: var(--withdraw);
   font-weight: 600;
+}
+
+/* Both highlighted AND memo-missing — blend both indicators */
+tr.row-highlighted.row-memo-missing {
+  background-color: color-mix(in srgb, var(--accent) 10%, color-mix(in srgb, var(--withdraw) 8%, transparent));
+  border-left: 3px solid var(--accent);
+}
+tr.row-highlighted.row-memo-missing:hover {
+  background-color: color-mix(in srgb, var(--accent) 14%, color-mix(in srgb, var(--withdraw) 10%, transparent));
 }
 
 /* ── Empty / loading states ────────────────────────────────── */
