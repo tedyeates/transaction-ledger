@@ -64,4 +64,4 @@ RootApp             → default export, wraps tree with ToastProvider
 | `income` | เข้าบัญชี rows only | รายการ field | ✓ |
 | `boss` | All rows | Read only | ✓ |
 
-Access is enforced by Supabase Row Level Security — not just the UI.
+Access is enforced by Supabase Row Level Security.
