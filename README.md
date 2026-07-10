@@ -65,3 +65,41 @@ RootApp             → default export, wraps tree with ToastProvider
 | `boss` | All rows | Read only | ✓ |
 
 Access is enforced by Supabase Row Level Security.
+
+## Deployment
+
+### Frontend (Static App)
+
+Build and deploy to any static host (Vercel, Netlify, Cloudflare Pages, etc.):
+
+```bash
+npm run build
+```
+
+Upload the `dist/` folder. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in your host's environment variables, pointing to your production Supabase project.
+
+### Database / RLS / Edge Functions (Supabase)
+
+```bash
+# Install Supabase CLI
+npm i -g supabase
+
+# Link to your remote project (ref found in Dashboard → Settings → General)
+supabase link --project-ref <your-project-ref>
+
+# Push local migrations to production
+supabase db push
+
+# Deploy edge functions (if any)
+supabase functions deploy <function-name>
+```
+
+### Pull Remote Schema Changes
+
+If you made changes directly in the Supabase dashboard and want to track them locally:
+
+```bash
+supabase db pull
+```
+
+> **Note:** Ensure production environment variables point to your production Supabase project, not a local/dev instance.
