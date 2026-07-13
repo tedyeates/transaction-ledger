@@ -108,6 +108,17 @@ describe('parseBankCSV', () => {
     expect(rows[1].type).toBe('income')
   })
 
+  it('handles zero values correctly (not treated as null)', () => {
+    const csv = [
+      'วันที่ทำรายการ,วันที่มีผล,คำอธิบาย,เลขที่เช็ค,หักบัญชี,เข้าบัญชี,ยอดคงเหลือ,ช่องทางทำรายการ',
+      '15/1/2569 9:30,15/01/69,ค่าน้ำ,,500.00,,0.00,K PLUS',
+    ].join('\n')
+
+    const rows = parseBankCSV(makeCSVBuffer(csv))
+    expect(rows[0].balance).toBe(0)
+    expect(rows[0].balance).not.toBeNull()
+  })
+
   it('throws if header not found', () => {
     const csv = 'col1,col2\nfoo,bar\n'
     expect(() => parseBankCSV(makeCSVBuffer(csv))).toThrow('ไม่พบหัวตาราง')
@@ -212,6 +223,24 @@ describe('generateUpdateSQL', () => {
 
     const sql = generateUpdateSQL(row)
     expect(sql).toContain("description = 'it''s a test'")
+  })
+
+  it('handles zero balance correctly in SET clause', () => {
+    const row = {
+      tx_datetime: '2026-01-15T09:30:00',
+      withdraw: 500,
+      deposit: null,
+      type: 'withdrawal',
+      balance: 0,
+      description: 'test',
+      channel: null,
+      effective_date: null,
+      cheque_number: null,
+    }
+
+    const sql = generateUpdateSQL(row)
+    expect(sql).toContain('balance = 0')
+    expect(sql).not.toContain('balance = NULL')
   })
 })
 

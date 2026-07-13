@@ -114,9 +114,12 @@ export function parseBankCSV(buffer) {
   if (rows.length === 0) throw new Error('ไม่พบรายการธุรกรรมในไฟล์')
 
   return rows.map(r => {
-    const withdraw = parseFloat(r['หักบัญชี']?.replace(/,/g, '')) || null
-    const deposit = parseFloat(r['เข้าบัญชี']?.replace(/,/g, '')) || null
-    const balance = parseFloat(r['ยอดคงเหลือ']?.replace(/,/g, '')) || null
+    const withdrawRaw = parseFloat(r['หักบัญชี']?.replace(/,/g, ''))
+    const depositRaw = parseFloat(r['เข้าบัญชี']?.replace(/,/g, ''))
+    const balanceRaw = parseFloat(r['ยอดคงเหลือ']?.replace(/,/g, ''))
+    const withdraw = Number.isNaN(withdrawRaw) ? null : withdrawRaw
+    const deposit = Number.isNaN(depositRaw) ? null : depositRaw
+    const balance = Number.isNaN(balanceRaw) ? null : balanceRaw
     const txDatetime = thaiDateStringToISO(r['วันที่ทำรายการ'])
 
     return {
