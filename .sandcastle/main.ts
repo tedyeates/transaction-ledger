@@ -227,13 +227,7 @@ async function main() {
   // ─── Branch & Sandbox Lifecycle (#41) ────────────────────────────────────
 
   const branch = `feature/prd-${prdNumber}`;
-
-  try {
-    execSync(`git checkout -b ${branch}`, { stdio: "ignore" });
-  } catch {
-    execSync(`git checkout ${branch}`, { stdio: "ignore" });
-  }
-  log(`On branch: ${branch}`);
+  log(`Target branch: ${branch}`);
 
   await using sandbox = await createSandbox({
     branch,
