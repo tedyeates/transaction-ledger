@@ -4,8 +4,11 @@
 -- 1. Drop the unique index
 DROP INDEX IF EXISTS "public"."idx_tx_unique";
 
--- 2. Replace import_transactions RPC with new logic
-CREATE OR REPLACE FUNCTION "public"."import_transactions"("rows" "jsonb")
+-- 2. Drop old function (return type changes from void to jsonb — cannot use CREATE OR REPLACE)
+DROP FUNCTION IF EXISTS "public"."import_transactions"("rows" "jsonb");
+
+-- 3. Create import_transactions RPC with new logic
+CREATE FUNCTION "public"."import_transactions"("rows" "jsonb")
 RETURNS "jsonb"
 LANGUAGE "plpgsql" SECURITY DEFINER
 AS $$
@@ -68,3 +71,7 @@ BEGIN
   RETURN jsonb_build_object('inserted', v_inserted, 'skipped', v_skipped);
 END;
 $$;
+
+-- 4. Restore grants (DROP removed them)
+GRANT ALL ON FUNCTION "public"."import_transactions"("rows" "jsonb") TO "authenticated";
+GRANT ALL ON FUNCTION "public"."import_transactions"("rows" "jsonb") TO "service_role";
