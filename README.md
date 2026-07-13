@@ -6,17 +6,17 @@ Role-separated bank statement viewer for Kasikorn Bank CSV exports.
 
 ```bash
 # 1. Install dependencies
-npm install
+pnpm install
 
 # 2. Configure environment
 cp .env.example .env
 # Edit .env and fill in your Supabase URL and anon key
 
 # 3. Run dev server
-npm run dev
+pnpm dev
 
 # 4. Build for production
-npm run build
+pnpm build
 ```
 
 ## Project Structure
@@ -60,8 +60,8 @@ RootApp             → default export, wraps tree with ToastProvider
 
 | Role | Can See | Can Edit | Can Import CSV |
 |---|---|---|---|
-| `withdrawal` | หักบัญชี rows only | รายการ field | ✓ |
-| `income` | เข้าบัญชี rows only | รายการ field | ✓ |
-| `boss` | All rows | Read only | ✓ |
+| `withdrawal` | หักบัญชี rows only | รายการ field | ✗ |
+| `income` | เข้าบัญชี rows only | รายการ field | ✗ |
+| `admin` | All rows + balance | รายการ, หมายเหตุ, highlight | ✓ |
 
 Access is enforced by Supabase Row Level Security.
