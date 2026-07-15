@@ -41,21 +41,20 @@ export function ImportModal({ onClose, onImported }) {
     if (!parsedRows) return
     setImporting(true)
     setError('')
-    const CHUNK = 500
-    let imported = 0
-    for (let i = 0; i < parsedRows.length; i += CHUNK) {
-      const chunk = parsedRows.slice(i, i + CHUNK)
-      const { error: sbError } = await supabase.rpc('import_transactions', { rows: chunk })
-      if (sbError) {
-        console.error('Import error:', sbError)
-        setError(sbError.message)
-        setImporting(false)
-        return
-      }
-      imported += chunk.length
+    const { data, error: sbError } = await supabase.rpc('import_transactions', { rows: parsedRows })
+    if (sbError) {
+      console.error('Import error:', sbError)
+      setError(sbError.message)
+      setImporting(false)
+      return
     }
     setImporting(false)
-    addToast(`นำเข้า ${imported} รายการ — ข้ามรายการซ้ำ`, 'success')
+    const { inserted, skipped } = data
+    if (inserted === 0) {
+      addToast('ไม่พบรายการใหม่ — ทุกรายการมีอยู่ในระบบแล้ว', 'warning')
+    } else {
+      addToast(`นำเข้า ${inserted} รายการใหม่ (${skipped} รายการซ้ำ — ข้าม)`, 'success')
+    }
     onImported()
     onClose()
   }
