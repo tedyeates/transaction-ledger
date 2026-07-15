@@ -23,6 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 *.env
+.pnpm-store
 
 # Sandcastle
 .sandcastle/logs/
+.backup
