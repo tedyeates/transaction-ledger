@@ -84,6 +84,14 @@ cat supabase/migrations/*_csv_update.sql
 
 # 9. Apply migration to local DB
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -f supabase/migrations/*_csv_update.sql
+
+# 9b. Link to remote project (if not already linked)
+#     Get project-id from Supabase dashboard URL:
+#     https://supabase.com/dashboard/project/<project-id>
+npx supabase link --project-ref <project-id>
+
+# 9c. Push migrations to remote
+npx supabase db push
 ```
 
 ---
