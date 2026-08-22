@@ -3,7 +3,7 @@
 
 BEGIN;
 
-SELECT plan(30);
+SELECT plan(47);
 
 -- =============================================================================
 -- HELPERS: Simulate authenticated users via JWT claims
@@ -179,6 +179,176 @@ SELECT ok(
     NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
   )) = 0,
   'get_transaction_stats_v2: p_type withdrawal shows zero deposits'
+);
+
+-- =============================================================================
+-- TEST: get_transaction_stats_v2 authorization (issue #21)
+-- =============================================================================
+
+-- Unauthenticated caller gets Permission denied, never real totals
+SELECT tests.clear_auth();
+
+SELECT throws_ok(
+  $$SELECT * FROM public.get_transaction_stats_v2(
+    NULL::text, NULL::text, NULL::timestamptz, NULL::timestamptz, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+  )$$,
+  'Permission denied',
+  'get_transaction_stats_v2: unauthenticated caller denied'
+);
+
+SELECT throws_ok(
+  $$SELECT * FROM public.get_transaction_stats(
+    NULL::text, NULL::text, NULL::timestamptz, NULL::timestamptz, NULL::text
+  )$$,
+  'Permission denied',
+  'get_transaction_stats: unauthenticated caller denied'
+);
+
+-- Withdrawal accountant: totals cover withdrawal rows only, total_deposits is 0
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000002'::uuid);
+
+SELECT ok(
+  (SELECT total_deposits FROM public.get_transaction_stats_v2(
+    NULL::text, NULL::text, NULL::timestamptz, NULL::timestamptz, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+  )) = 0,
+  'get_transaction_stats_v2: withdrawal accountant sees zero deposits'
+);
+
+SELECT ok(
+  (SELECT total_withdraws FROM public.get_transaction_stats_v2(
+    NULL::text, NULL::text, NULL::timestamptz, NULL::timestamptz, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+  )) > 0,
+  'get_transaction_stats_v2: withdrawal accountant sees own totals'
+);
+
+-- Withdrawal accountant cannot widen scope by passing p_type = 'income'
+SELECT ok(
+  (SELECT total_deposits FROM public.get_transaction_stats_v2(
+    'income'::text, NULL::text, NULL::timestamptz, NULL::timestamptz, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+  )) = 0,
+  'get_transaction_stats_v2: withdrawal accountant cannot widen scope via p_type'
+);
+
+-- Income accountant: mirror case
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000003'::uuid);
+
+SELECT ok(
+  (SELECT total_withdraws FROM public.get_transaction_stats_v2(
+    NULL::text, NULL::text, NULL::timestamptz, NULL::timestamptz, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+  )) = 0,
+  'get_transaction_stats_v2: income accountant sees zero withdraws'
+);
+
+SELECT ok(
+  (SELECT total_deposits FROM public.get_transaction_stats_v2(
+    NULL::text, NULL::text, NULL::timestamptz, NULL::timestamptz, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+  )) > 0,
+  'get_transaction_stats_v2: income accountant sees own totals'
+);
+
+-- Admin: totals cover all rows (both non-zero)
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001'::uuid);
+
+SELECT ok(
+  (SELECT total_withdraws FROM public.get_transaction_stats_v2(
+    NULL::text, NULL::text, NULL::timestamptz, NULL::timestamptz, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+  )) > 0
+  AND
+  (SELECT total_deposits FROM public.get_transaction_stats_v2(
+    NULL::text, NULL::text, NULL::timestamptz, NULL::timestamptz, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+  )) > 0,
+  'get_transaction_stats_v2: admin sees totals across all rows'
+);
+
+-- =============================================================================
+-- TEST: get_transactions_v2 column masking (issue #21)
+-- =============================================================================
+
+-- Accountant: balance and remark are NULL for every returned row
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000002'::uuid);
+
+SELECT ok(
+  (SELECT count(*) FROM public.get_transactions_v2(
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+  ) WHERE balance IS NOT NULL OR remark IS NOT NULL) = 0,
+  'get_transactions_v2: accountant gets NULL balance and remark on every row'
+);
+
+-- Admin: balance and remark are populated (seed data has non-null values)
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001'::uuid);
+
+SELECT ok(
+  (SELECT count(*) FROM public.get_transactions_v2(
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+  ) WHERE balance IS NOT NULL) > 0,
+  'get_transactions_v2: admin gets populated balance'
+);
+
+-- =============================================================================
+-- TEST: dropped 9-parameter overloads and anon privilege revocation (issue #21)
+-- =============================================================================
+
+SELECT tests.clear_auth();
+
+SELECT is_empty(
+  $$SELECT p.oid FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'get_transactions_v2'
+    AND pg_get_function_identity_arguments(p.oid) NOT LIKE '%p_col_channel%'$$,
+  'get_transactions_v2: 9-parameter overload no longer exists'
+);
+
+SELECT is_empty(
+  $$SELECT p.oid FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'get_transaction_stats_v2'
+    AND pg_get_function_identity_arguments(p.oid) NOT LIKE '%p_col_channel%'$$,
+  'get_transaction_stats_v2: 9-parameter overload no longer exists'
+);
+
+SELECT ok(
+  NOT has_function_privilege('anon', 'public.get_transaction_stats_v2(text,text,timestamptz,timestamptz,text,text,text,text,text,text,numeric,numeric,numeric)', 'EXECUTE'),
+  'anon has no EXECUTE on get_transaction_stats_v2'
+);
+
+SELECT ok(
+  NOT has_function_privilege('anon', 'public.get_transactions_v2(text,text,text,text,text,text,text,text,text,text,numeric,numeric,numeric)', 'EXECUTE'),
+  'anon has no EXECUTE on get_transactions_v2'
+);
+
+SELECT ok(
+  NOT has_function_privilege('anon', 'public.get_latest_balance()', 'EXECUTE'),
+  'anon has no EXECUTE on get_latest_balance'
+);
+
+SELECT ok(
+  NOT has_function_privilege('anon', 'public.update_memo(bigint,text)', 'EXECUTE'),
+  'anon has no EXECUTE on update_memo'
+);
+
+SELECT ok(
+  NOT has_function_privilege('anon', 'public.update_remark(bigint,text)', 'EXECUTE'),
+  'anon has no EXECUTE on update_remark'
 );
 
 -- =============================================================================
