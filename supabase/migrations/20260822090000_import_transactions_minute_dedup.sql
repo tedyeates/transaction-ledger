@@ -58,7 +58,8 @@ BEGIN
       r->>'counterparty_account' AS counterparty_account,
       COALESCE(r->>'currency', 'THB') AS currency,
       (r->>'fx_rate')::numeric AS fx_rate,
-      COALESCE(r->>'statement_format', 'thai_legacy') AS statement_format
+      COALESCE(r->>'statement_format', 'thai_legacy') AS statement_format,
+      (r->>'statement_exported_at')::timestamptz AS statement_exported_at
     FROM jsonb_array_elements(rows) AS r
   ),
   existing_minutes AS (
@@ -84,14 +85,14 @@ BEGIN
       withdraw, deposit, balance, channel, type,
       branch, location, terminal_id, narrative,
       counterparty_name, counterparty_account, currency, fx_rate,
-      statement_format
+      statement_format, statement_exported_at
     )
     SELECT
       tx_datetime, effective_date, description, cheque_number,
       withdraw, deposit, balance, channel, type,
       branch, location, terminal_id, narrative,
       counterparty_name, counterparty_account, currency, fx_rate,
-      statement_format
+      statement_format, statement_exported_at
     FROM to_insert
     RETURNING 1
   )

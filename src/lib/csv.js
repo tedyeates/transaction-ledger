@@ -383,6 +383,19 @@ const PARSERS = {
 }
 
 /**
+ * Stamp the file-level export timestamp onto every row as
+ * `statement_exported_at`, so provenance travels with each row into
+ * `import_transactions` rather than being dropped at the parser boundary.
+ * `exportedAt` is a preamble fact (one per file), not a per-row CSV column,
+ * so it can't be set inline in each format's row-mapping like the other
+ * new fields; this broadcasts it after both parsers return their rows.
+ * `exportedAt` is null for thai_legacy (no preamble to read it from).
+ */
+function stampExportedAt(rows, exportedAt) {
+  return rows.map(row => ({ ...row, statement_exported_at: exportedAt }))
+}
+
+/**
  * Parse bank CSV bytes under a chosen (or auto-detected) statement format.
  *
  * @param {ArrayBuffer} arrayBuffer
@@ -406,7 +419,7 @@ export function parseBankCSV(arrayBuffer, options = {}) {
       throw new Error(`ไม่รู้จักรูปแบบไฟล์นี้ — รองรับเฉพาะ: ${formatSupportList()}`)
     }
     const { rows, exportedAt } = PARSERS[detected](arrayBuffer)
-    return { format: detected, exportedAt, rows }
+    return { format: detected, exportedAt, rows: stampExportedAt(rows, exportedAt) }
   }
 
   if (!PARSERS[format]) {
@@ -422,5 +435,5 @@ export function parseBankCSV(arrayBuffer, options = {}) {
   }
 
   const { rows, exportedAt } = PARSERS[format](arrayBuffer)
-  return { format, exportedAt, rows }
+  return { format, exportedAt, rows: stampExportedAt(rows, exportedAt) }
 }

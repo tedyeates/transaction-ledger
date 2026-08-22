@@ -3,7 +3,7 @@
 
 BEGIN;
 
-SELECT plan(56);
+SELECT plan(58);
 
 -- =============================================================================
 -- HELPERS: Simulate authenticated users via JWT claims
@@ -623,12 +623,52 @@ SELECT throws_ok(
 );
 
 -- =============================================================================
+-- TEST: import_transactions round-trips every new statement-v2 field (#29)
+-- =============================================================================
+--
+-- Regression target: a field the parser emits but the RPC's jsonb extraction
+-- does not read inserts silently as NULL, and every test that mocks the
+-- database boundary still passes. This asserts against the real RPC and a
+-- real row read back, not a mocked payload or a hand-written INSERT.
+--
+-- channel_code and cheque_number_normalized are deliberately not in the
+-- jsonb payload below: the RPC does not accept them from the client at all
+-- (see the migration) — they are derived server-side by
+-- trg_derive_transaction_normalised_fields from the raw channel/
+-- cheque_number columns on every insert. Asserted separately below.
+
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001'::uuid);
+
+SELECT ok(
+  (SELECT (public.import_transactions(
+    '[{"tx_datetime":"2026-08-19T17:09:49Z","effective_date":"2026-08-19","description":"new fields round trip","cheque_number":"0002933140","withdraw":null,"deposit":59171.00,"balance":2670300.77,"channel":"Mobile Phone Banking","type":"income","branch":"HEAD OFFICE","location":"Sathorn","terminal_id":"004286","narrative":"Bank narrative text","counterparty_name":"บจก. ชิโนซาวา (ประเทศไทย)","counterparty_account":"0942XXX148","currency":"THB","fx_rate":33.50,"statement_format":"english_v2","statement_exported_at":"2026-08-21T10:49:45Z"}]'::jsonb
+  ))->>'inserted' = '1'),
+  'import_transactions: new-fields round-trip row imports'
+);
+
+SELECT tests.clear_auth();
+
+SELECT results_eq(
+  $$SELECT branch, location, terminal_id, narrative, counterparty_name,
+           counterparty_account, currency, fx_rate, channel_code,
+           cheque_number_normalized, statement_exported_at
+      FROM public.transactions WHERE description = 'new fields round trip'$$,
+  $$VALUES ('HEAD OFFICE'::text, 'Sathorn'::text, '004286'::text,
+            'Bank narrative text'::text, 'บจก. ชิโนซาวา (ประเทศไทย)'::text,
+            '0942XXX148'::text, 'THB'::text, 33.50::numeric,
+            'MOBILE_PHONE_BANKING'::text, '2933140'::text,
+            '2026-08-21T10:49:45Z'::timestamptz)$$,
+  'import_transactions: every new bank field round-trips through the real RPC, not a mock'
+);
+
+-- =============================================================================
 -- CLEANUP
 -- =============================================================================
 
 SELECT tests.clear_auth();
 DELETE FROM public.transactions WHERE description = 'test import';
 DELETE FROM public.transactions WHERE description = 'v2 gregorian effective_date';
+DELETE FROM public.transactions WHERE description = 'new fields round trip';
 
 SELECT * FROM finish();
 

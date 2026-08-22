@@ -65,6 +65,7 @@ describe('parseBankCSV — thai_legacy', () => {
       counterparty_name: null,
       counterparty_account: null,
       statement_format: 'thai_legacy',
+      statement_exported_at: null,
     }])
   })
 
@@ -187,6 +188,22 @@ describe('parseBankCSV — english_v2', () => {
 
     const result = parseBankCSV(new TextEncoder().encode(csv).buffer, { format: 'english_v2' })
     expect(result.exportedAt).toBe('2026-08-21T10:49:45')
+  })
+
+  it('stamps statement_exported_at onto every row so the RPC payload carries it', () => {
+    const csv = [
+      '\uFEFFExport Date and Time',
+      '"21/08/2026 10:49:45"',
+      'Transaction Date and Time,Value Date,Description,Cheque Number,Debit Amount,Credit Amount,Ledger Balance,Channel of transaction,Branch,Location,TerminalID,Narrative,Counter Party Account Name,Counter Party Account Number,FX Rate',
+      '"21/08/2026 10:30:57","21/08/2026","Test one","",0.00,"1.00 THB","1.00 THB","Automatic","","",,,"","","0.00"',
+      '"21/08/2026 10:31:00","21/08/2026","Test two","",0.00,"2.00 THB","3.00 THB","Automatic","","",,,"","","0.00"',
+    ].join('\n')
+
+    const result = parseBankCSV(new TextEncoder().encode(csv).buffer, { format: 'english_v2' })
+    expect(result.rows).toHaveLength(2)
+    for (const row of result.rows) {
+      expect(row.statement_exported_at).toBe('2026-08-21T10:49:45')
+    }
   })
 
   it('throws naming both formats when a v2 file is selected as thai_legacy', () => {

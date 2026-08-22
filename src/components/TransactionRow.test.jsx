@@ -97,3 +97,43 @@ describe('TransactionRow highlight toggle visibility', () => {
     expect(screen.queryByRole('button', { name: 'Remove highlight' })).toBeNull()
   })
 })
+
+describe('TransactionRow counterparty display', () => {
+  // Counterparty name and masked account are bank-sourced descriptive data
+  // at the same sensitivity as description (statement-format-v2 design.md),
+  // so all three roles — admin, withdrawal, income — see the same cell.
+  // The masked account (e.g. 0942XXX148) shows only as a hover title, never
+  // as visible cell text — the bank's own masking must not be exposed further.
+  it.each([ROLES.admin, ROLES.withdraw, ROLES.deposit])(
+    'shows counterparty_name text for %s role',
+    (role) => {
+      const tr = renderRow({
+        role,
+        txOverrides: { counterparty_name: 'บจก. ชิโนซาวา (ประเทศไทย)', counterparty_account: '0942XXX148' },
+      })
+      const cell = tr.querySelector('.cell-counterparty')
+      expect(cell).not.toBeNull()
+      expect(cell.textContent).toBe('บจก. ชิโนซาวา (ประเทศไทย)')
+    }
+  )
+
+  it.each([ROLES.admin, ROLES.withdraw, ROLES.deposit])(
+    'renders an empty counterparty cell rather than hiding it for %s role when counterparty_name is null',
+    (role) => {
+      const tr = renderRow({ role, txOverrides: { counterparty_name: null, counterparty_account: null } })
+      const cell = tr.querySelector('.cell-counterparty')
+      expect(cell).not.toBeNull()
+      expect(cell.textContent).toBe('')
+    }
+  )
+
+  it('exposes the masked counterparty account only as a title attribute, not as visible text', () => {
+    const tr = renderRow({
+      role: ROLES.admin,
+      txOverrides: { counterparty_name: 'Example Counterparty', counterparty_account: '0942XXX148' },
+    })
+    const cell = tr.querySelector('.cell-counterparty')
+    expect(cell.getAttribute('title')).toBe('0942XXX148')
+    expect(cell.textContent).not.toContain('0942XXX148')
+  })
+})

@@ -34,7 +34,8 @@ Accumulating record of test tooling, strategy, and conventions. Context for PR r
 
 - Real bank exports are used as fixtures deliberately, because format quirks are the thing under test and synthetic files do not reproduce them (BOM, whitespace-only trailer, double-spaced channel names, bank-truncated counterparty names).
 - `texport.csv` — Kasikorn English/Gregorian export, 92 transactions, 15 columns, exported 21/08/2026. Reference facts: 82 distinct timestamps, seven rows sharing `18/08/2026 21:07:00`, 59 rows with zero debit, 12 rows with a counterparty, `Narrative` empty and `FX Rate` `0.00` throughout.
-- Fixtures containing real statement data must not be extended with further real exports, and must keep the bank's own account masking.
+- **`texport.csv` is never committed.** It contains real financial data (customer names, masked account numbers) and is listed in `.gitignore`. It must exist locally, at the repo root, for the tests that use it to exercise their real-fixture path. Any test reading it must guard on its absence (see `it.runIf(fixtureBuffer)` in `src/lib/csv.test.js`) and skip cleanly rather than fail when the file is not present — this is the expected state in a fresh checkout or CI.
+- Fixtures containing real statement data must never be committed, must not be extended with further real exports, and must keep the bank's own account masking.
 
 ## Per-Feature Notes
 

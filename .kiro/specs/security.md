@@ -30,7 +30,7 @@ Fixed in migration `20260822080000_rpc_authz_hardening.sql` (issue #21, closed).
 
 - **CSV import is the only ingress for bank data.** Parsing is client-side by design — statement contents are never sent to a third party. `csv-to-migration.js` exists for the same reason: data corrections are generated locally as SQL rather than shared.
 - **Counterparty PII (statement-format-v2).** `counterparty_name` holds real customer and company names; `counterparty_account` holds bank-masked account numbers (`0942XXX148`) — masking is the bank's, not ours, and must not be un-masked or reconstructed. Both are readable by accountant roles by design, and are additionally exposed to unintended callers by the `get_transactions_v2` 9-parameter overload and the missing column masking described above.
-- **Test fixtures contain real statement data.** `texport.csv` is a real export (92 transactions, Thai company names, masked accounts). It is committed as a fixture deliberately; do not extend it with additional real statements, and do not add unmasked identifiers to it.
+- **Test fixtures contain real statement data.** `texport.csv` is a real export (92 transactions, Thai company names, masked accounts). It is deliberately **not committed** — it is listed in `.gitignore` and must only ever exist as a local, uncommitted file at the repo root. Do not remove it from `.gitignore`, do not extend it with additional real statements, and do not add unmasked identifiers to it.
 - `.env` holds the Supabase URL and anon key and is gitignored. `prod_data.dump` is a production dump present in the repo root — verify it is gitignored before any commit that touches root files.
 
 ## Constraints for New Work
