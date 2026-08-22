@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ROLES } from '../lib/constants'
-import { formatBaht, formatThaiDateTime } from '../lib/utils'
+import { formatBaht, formatThaiDateTime, formatThaiDate } from '../lib/utils'
 
 export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, onToggleHighlight, role }) {
   const [highlightInFlight, setHighlightInFlight] = useState(false)
@@ -32,7 +32,7 @@ export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditR
       <td>
         <span className="cell-date">{formatThaiDateTime(tx.tx_datetime)}</span>
       </td>
-      <td><span className="cell-eff">{tx['effective_date'] ?? ''}</span></td>
+      <td><span className="cell-eff">{formatThaiDate(tx['effective_date'])}</span></td>
       <td>
         <span className="cell-desc" title={tx['description'] ?? ''}>
           {tx['description'] ?? '—'}
@@ -49,6 +49,7 @@ export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditR
         <td className="cell-balance">{formatBaht(tx['balance'])}</td>
       )}
       <td><span className="cell-channel">{tx['channel'] ?? ''}</span></td>
+      <td><span className="cell-counterparty" title={tx['counterparty_account'] ?? ''}>{tx['counterparty_name'] ?? ''}</span></td>
       <td>
         {canEdit ? (
           <button

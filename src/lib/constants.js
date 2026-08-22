@@ -1,5 +1,5 @@
 export const PAGE_SIZE = 75
-export const PREVIEW_COLS = ['tx_datetime', 'description', 'withdraw', 'deposit', 'balance', 'channel']
+export const PREVIEW_COLS = ['tx_datetime', 'description', 'withdraw', 'deposit', 'balance', 'channel', 'counterparty_name']
 
 export const ROLES = {
   admin: 'admin',

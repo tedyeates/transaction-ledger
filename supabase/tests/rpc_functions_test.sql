@@ -3,7 +3,7 @@
 
 BEGIN;
 
-SELECT plan(47);
+SELECT plan(56);
 
 -- =============================================================================
 -- HELPERS: Simulate authenticated users via JWT claims
@@ -501,7 +501,7 @@ SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001'::uuid);
 
 SELECT ok(
   (SELECT (public.import_transactions(
-    '[{"tx_datetime":"2099-01-01T00:00:00","effective_date":"01/01/2642","description":"test import","withdraw":100,"deposit":null,"balance":900,"channel":"TEST","type":"withdrawal"}]'::jsonb
+    '[{"tx_datetime":"2099-01-01T00:00:00","effective_date":"2099-01-01","description":"test import","withdraw":100,"deposit":null,"balance":900,"channel":"TEST","type":"withdrawal"}]'::jsonb
   ))->>'inserted' = '1'),
   'import_transactions: admin can import new row'
 );
@@ -509,16 +509,115 @@ SELECT ok(
 -- Duplicate tx_datetime gets skipped
 SELECT ok(
   (SELECT (public.import_transactions(
-    '[{"tx_datetime":"2099-01-01T00:00:00","effective_date":"01/01/2642","description":"duplicate","withdraw":200,"deposit":null,"balance":700,"channel":"TEST","type":"withdrawal"}]'::jsonb
+    '[{"tx_datetime":"2099-01-01T00:00:00","effective_date":"2099-01-01","description":"duplicate","withdraw":200,"deposit":null,"balance":700,"channel":"TEST","type":"withdrawal"}]'::jsonb
   ))->>'skipped' = '1'),
   'import_transactions: duplicate tx_datetime skipped'
+);
+
+-- New minutes import every row, even when timestamps include seconds.
+SELECT ok(
+  (SELECT (result->>'inserted' = '2' AND result->>'skipped' = '0')
+   FROM (
+     SELECT public.import_transactions(
+       '[
+         {"tx_datetime":"2099-03-01T09:00:05Z","effective_date":"2099-03-01","description":"minute-dedup new minute one","withdraw":10,"deposit":null,"balance":990,"channel":"TEST","type":"withdrawal"},
+         {"tx_datetime":"2099-03-01T09:01:47Z","effective_date":"2099-03-01","description":"minute-dedup new minute two","withdraw":20,"deposit":null,"balance":970,"channel":"TEST","type":"withdrawal"}
+       ]'::jsonb
+     ) AS result
+   ) import_result),
+  'import_transactions: all-new minutes insert every row'
+);
+
+-- Bank may post many rows in one second; a fresh minute must retain all of them.
+SELECT ok(
+  (SELECT result->>'inserted' = '7' AND result->>'skipped' = '0'
+   FROM (
+     SELECT public.import_transactions(
+       (SELECT jsonb_agg(jsonb_build_object(
+         'tx_datetime', '2099-04-01T21:07:00Z',
+         'effective_date', '2099-04-01',
+         'description', 'minute-dedup same-second ' || n,
+         'withdraw', n,
+         'deposit', NULL,
+         'balance', 1000 - n,
+         'channel', 'TEST',
+         'type', 'withdrawal'
+       )) FROM generate_series(1, 7) AS n)
+     ) AS result
+   ) import_result),
+  'import_transactions: seven rows at same second all insert'
+);
+
+
+-- Old-format minute precision blocks all second-precision rows in its minute.
+SELECT ok(
+  (SELECT (public.import_transactions(
+    '[{"tx_datetime":"2099-05-01T10:35:00Z","effective_date":"2099-05-01","description":"minute-dedup existing minute","withdraw":10,"deposit":null,"balance":990,"channel":"TEST","type":"withdrawal"}]'::jsonb
+  ))->>'inserted' = '1'),
+  'import_transactions: minute-precision historical row imports'
+);
+
+SELECT ok(
+  (SELECT (result->>'inserted' = '0' AND result->>'skipped' = '1')
+   FROM (
+     SELECT public.import_transactions(
+       '[{"tx_datetime":"2099-05-01T10:35:57Z","effective_date":"2099-05-01","description":"minute-dedup blocked second","withdraw":20,"deposit":null,"balance":970,"channel":"TEST","type":"withdrawal"}]'::jsonb
+     ) AS result
+   ) import_result),
+  'import_transactions: existing minute skips second-precision row'
+);
+
+-- Existing and new minutes in one payload produce matching split counts.
+SELECT ok(
+  (SELECT (result->>'inserted' = '2' AND result->>'skipped' = '1')
+   FROM (
+     SELECT public.import_transactions(
+       '[
+         {"tx_datetime":"2099-05-01T10:35:12Z","effective_date":"2099-05-01","description":"minute-dedup mixed existing","withdraw":30,"deposit":null,"balance":940,"channel":"TEST","type":"withdrawal"},
+         {"tx_datetime":"2099-05-01T10:36:00Z","effective_date":"2099-05-01","description":"minute-dedup mixed new one","withdraw":40,"deposit":null,"balance":900,"channel":"TEST","type":"withdrawal"},
+         {"tx_datetime":"2099-05-01T10:36:00Z","effective_date":"2099-05-01","description":"minute-dedup mixed new two","withdraw":50,"deposit":null,"balance":850,"channel":"TEST","type":"withdrawal"}
+       ]'::jsonb
+     ) AS result
+   ) import_result),
+  'import_transactions: mixed existing and new minutes report split counts'
+);
+
+-- Regression (#26): a v2-format row's Gregorian-year effective_date must
+-- import as that same calendar year, not raise "must use a Buddhist-era
+-- year" (the historical parse_legacy_effective_date guard no longer runs
+-- against incoming rows) and not silently become year-1483.
+SELECT ok(
+  (SELECT (public.import_transactions(
+    '[{"tx_datetime":"2026-08-20T21:07:00Z","effective_date":"2026-08-20","description":"v2 gregorian effective_date","withdraw":4121.64,"deposit":null,"balance":2589588.86,"channel":"Automatic","type":"withdrawal","branch":"BANG KHRU","location":"Phra Pradaeng","terminal_id":"020200","narrative":null,"counterparty_name":null,"counterparty_account":null,"currency":"THB","fx_rate":null,"statement_format":"english_v2"}]'::jsonb
+  ))->>'inserted' = '1'),
+  'import_transactions: v2 Gregorian effective_date imports without raising'
+);
+
+SELECT tests.clear_auth();
+
+SELECT is(
+  (SELECT effective_date FROM public.transactions WHERE description = 'v2 gregorian effective_date'),
+  DATE '2026-08-20',
+  'import_transactions: v2 effective_date stores the correct calendar year, not 1483'
+);
+
+SELECT is(
+  (SELECT statement_format FROM public.transactions WHERE description = 'v2 gregorian effective_date'),
+  'english_v2',
+  'import_transactions: v2 row is tagged with statement_format english_v2'
+);
+
+SELECT is(
+  (SELECT withdraw FROM public.transactions WHERE description = 'v2 gregorian effective_date'),
+  4121.64,
+  'import_transactions: v2 signed debit stores as a positive withdraw amount'
 );
 
 -- Non-admin denied
 SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000002'::uuid);
 
 SELECT throws_ok(
-  $$SELECT public.import_transactions('[{"tx_datetime":"2099-02-01T00:00:00","effective_date":"01/02/2642","description":"hack","withdraw":1,"deposit":null,"balance":1,"channel":"X","type":"withdrawal"}]'::jsonb)$$,
+  $$SELECT public.import_transactions('[{"tx_datetime":"2099-02-01T00:00:00","effective_date":"2099-02-01","description":"hack","withdraw":1,"deposit":null,"balance":1,"channel":"X","type":"withdrawal"}]'::jsonb)$$,
   'Permission denied',
   'import_transactions: non-admin denied'
 );
@@ -529,6 +628,7 @@ SELECT throws_ok(
 
 SELECT tests.clear_auth();
 DELETE FROM public.transactions WHERE description = 'test import';
+DELETE FROM public.transactions WHERE description = 'v2 gregorian effective_date';
 
 SELECT * FROM finish();
 

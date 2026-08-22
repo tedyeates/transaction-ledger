@@ -91,7 +91,8 @@ describe('parseBankCSV', () => {
       '16/1/2569 10:00,16/01/69,เงินเดือน,,,25000.00,35000.00,K PLUS',
     ].join('\n')
 
-    const rows = parseBankCSV(makeCSVBuffer(csv))
+    const { format, rows } = parseBankCSV(makeCSVBuffer(csv), { format: 'thai_legacy' })
+    expect(format).toBe('thai_legacy')
     expect(rows).toHaveLength(2)
 
     expect(rows[0].tx_datetime).toBe('2026-01-15T09:30:00')
@@ -114,19 +115,19 @@ describe('parseBankCSV', () => {
       '15/1/2569 9:30,15/01/69,ค่าน้ำ,,500.00,,0.00,K PLUS',
     ].join('\n')
 
-    const rows = parseBankCSV(makeCSVBuffer(csv))
+    const { rows } = parseBankCSV(makeCSVBuffer(csv), { format: 'thai_legacy' })
     expect(rows[0].balance).toBe(0)
     expect(rows[0].balance).not.toBeNull()
   })
 
   it('throws if header not found', () => {
     const csv = 'col1,col2\nfoo,bar\n'
-    expect(() => parseBankCSV(makeCSVBuffer(csv))).toThrow('ไม่พบหัวตาราง')
+    expect(() => parseBankCSV(makeCSVBuffer(csv), { format: 'thai_legacy' })).toThrow('ไม่พบหัวตาราง')
   })
 
   it('throws if no data rows', () => {
     const csv = 'วันที่ทำรายการ,วันที่มีผล,คำอธิบาย,เลขที่เช็ค,หักบัญชี,เข้าบัญชี,ยอดคงเหลือ,ช่องทางทำรายการ\n'
-    expect(() => parseBankCSV(makeCSVBuffer(csv))).toThrow('ไม่พบรายการธุรกรรม')
+    expect(() => parseBankCSV(makeCSVBuffer(csv), { format: 'thai_legacy' })).toThrow('ไม่พบรายการธุรกรรม')
   })
 
   it('skips preamble lines before header', () => {
@@ -138,7 +139,7 @@ describe('parseBankCSV', () => {
       '15/1/2569 9:30,15/01/69,ค่าน้ำ,,500.00,,10000.00,K PLUS',
     ].join('\n')
 
-    const rows = parseBankCSV(makeCSVBuffer(csv))
+    const { rows } = parseBankCSV(makeCSVBuffer(csv), { format: 'thai_legacy' })
     expect(rows).toHaveLength(1)
   })
 })
@@ -326,7 +327,7 @@ describe('main()', () => {
 
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    const outputPath = main(['/tmp/test.csv'])
+    const outputPath = main(['/tmp/test.csv', '--format', 'thai_legacy'])
 
     expect(readFileSync).toHaveBeenCalledWith(expect.stringContaining('test.csv'))
     expect(mkdirSync).toHaveBeenCalledWith(expect.stringContaining('supabase/migrations'), { recursive: true })

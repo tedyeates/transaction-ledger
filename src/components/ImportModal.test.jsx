@@ -1,5 +1,5 @@
 /**
- * Unit tests for ImportModal — import flow (no chunking, new RPC response)
+ * Unit tests for ImportModal — import flow (no chunking, format registry)
  *
  * @vitest-environment jsdom
  */
@@ -15,12 +15,18 @@ vi.mock('../lib/supabase', () => ({
 
 // Mock parseBankCSV
 const mockRows = [
-  { tx_datetime: '2024-01-01T10:00:00', description: 'Test 1', withdraw: 100, deposit: null, balance: 9900, channel: 'ATM' },
-  { tx_datetime: '2024-01-02T10:00:00', description: 'Test 2', withdraw: null, deposit: 200, balance: 10100, channel: 'APP' },
-  { tx_datetime: '2024-01-03T10:00:00', description: 'Test 3', withdraw: 50, deposit: null, balance: 10050, channel: 'ATM' },
+  { tx_datetime: '2024-01-01T10:00:00', description: 'Test 1', withdraw: 100, deposit: null, balance: 9900, channel: 'ATM', counterparty_name: null },
+  { tx_datetime: '2024-01-02T10:00:00', description: 'Test 2', withdraw: null, deposit: 200, balance: 10100, channel: 'APP', counterparty_name: 'Someone' },
+  { tx_datetime: '2024-01-03T10:00:00', description: 'Test 3', withdraw: 50, deposit: null, balance: 10050, channel: 'ATM', counterparty_name: null },
 ]
-vi.mock('../lib/utils', () => ({
-  parseBankCSV: () => mockRows,
+const mockParseBankCSV = vi.fn(() => ({ format: 'english_v2', exportedAt: '2026-08-21T10:49:45', rows: mockRows }))
+vi.mock('../lib/csv', () => ({
+  parseBankCSV: (...args) => mockParseBankCSV(...args),
+  SOURCE_FORMATS: [
+    { id: 'english_v2', label: 'English / Gregorian (ใหม่)' },
+    { id: 'thai_legacy', label: 'ไทย / TIS-620 (เดิม)' },
+  ],
+  DEFAULT_STATEMENT_FORMAT: 'english_v2',
 }))
 
 // Track toast calls
@@ -31,7 +37,7 @@ vi.mock('../hooks/useToast', () => ({
 
 // Mock constants
 vi.mock('../lib/constants', () => ({
-  PREVIEW_COLS: ['tx_datetime', 'description', 'withdraw', 'deposit', 'balance'],
+  PREVIEW_COLS: ['tx_datetime', 'description', 'withdraw', 'deposit', 'balance', 'counterparty_name'],
 }))
 
 // Mock FileReader so onload fires synchronously
@@ -48,6 +54,7 @@ describe('ImportModal import flow', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockParseBankCSV.mockImplementation(() => ({ format: 'english_v2', exportedAt: '2026-08-21T10:49:45', rows: mockRows }))
     onClose = vi.fn()
     onImported = vi.fn()
     // Replace global FileReader
@@ -139,5 +146,61 @@ describe('ImportModal import flow', () => {
     })
     // All rows sent in one call
     expect(mockRpc.mock.calls[0][1].rows).toEqual(mockRows)
+  })
+
+  it('renders a format select box defaulting to english_v2', () => {
+    render(<ImportModal onClose={onClose} onImported={onImported} />)
+    const select = screen.getByLabelText('รูปแบบไฟล์')
+    expect(select.value).toBe('english_v2')
+  })
+
+  it('lists both formats plus an auto-detect option', () => {
+    render(<ImportModal onClose={onClose} onImported={onImported} />)
+    const select = screen.getByLabelText('รูปแบบไฟล์')
+    const optionValues = Array.from(select.options).map(o => o.value)
+    expect(optionValues).toEqual(['english_v2', 'thai_legacy', 'auto'])
+  })
+
+  it('passes the selected format through to the parser', async () => {
+    renderAndLoadCSV()
+    await waitFor(() => {
+      expect(mockParseBankCSV).toHaveBeenCalledWith(expect.anything(), { format: 'english_v2' })
+    })
+  })
+
+  it('re-parses the loaded file when the format selection changes', async () => {
+    renderAndLoadCSV()
+    await waitFor(() => expect(mockParseBankCSV).toHaveBeenCalledTimes(1))
+
+    const select = screen.getByLabelText('รูปแบบไฟล์')
+    fireEvent.change(select, { target: { value: 'thai_legacy' } })
+
+    await waitFor(() => {
+      expect(mockParseBankCSV).toHaveBeenCalledTimes(2)
+      expect(mockParseBankCSV).toHaveBeenLastCalledWith(expect.anything(), { format: 'thai_legacy' })
+    })
+  })
+
+  it('shows the format used and includes counterparty in the preview', async () => {
+    renderAndLoadCSV()
+    await waitFor(() => {
+      const previewInfo = document.querySelector('.preview-info')
+      expect(previewInfo).not.toBeNull()
+      expect(previewInfo.textContent).toContain('English / Gregorian')
+    })
+    const cells = screen.getAllByRole('cell')
+    expect(cells.map(c => c.textContent)).toContain('Someone')
+  })
+
+  it('surfaces a format mismatch throw through role="alert"', async () => {
+    mockParseBankCSV.mockImplementation(() => {
+      throw new Error('ไฟล์นี้ดูเหมือนรูปแบบ "English / Gregorian (ใหม่)" แต่เลือกไว้เป็น "ไทย / TIS-620 (เดิม)"')
+    })
+    renderAndLoadCSV()
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert.textContent).toContain('English / Gregorian')
+    })
   })
 })

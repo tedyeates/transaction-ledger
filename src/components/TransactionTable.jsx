@@ -19,6 +19,7 @@ export function TransactionTable({
     { key: 'deposit',       label: 'เข้าบัญชี',   filterKey: 'colDeposit',  numeric: true  },
     ...(role === ROLES.admin ? [{ key: 'balance', label: 'ยอดคงเหลือ', filterKey: 'colBalance', numeric: true }] : []),
     { key: 'channel',       label: 'ช่องทาง',     filterKey: 'colChannel',  numeric: false },
+    { key: 'counterparty_name', label: 'คู่ค้า',   filterKey: 'colCounterparty', numeric: false },
     { key: 'memo',          label: canEdit ? 'รายการ ✏' : 'รายการ', filterKey: 'colMemo', numeric: false },
     ...(role === ROLES.admin ? [{ key: 'remark', label: 'หมายเหตุ ✏', filterKey: 'colRemark', numeric: false }] : []),
     ...(role === ROLES.admin ? [{ key: 'highlight', label: '★', className: 'col-highlight' }] : []),
