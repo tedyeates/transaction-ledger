@@ -28,3 +28,6 @@ dist-ssr
 # Sandcastle
 .sandcastle/logs/
 .backup
+
+# Bank statement exports contain real financial data — never commit
+texport.csv
