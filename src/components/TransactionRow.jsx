@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ROLES } from '../lib/constants'
-import { formatBaht, formatThaiDateTime } from '../lib/utils'
+import { formatBaht, formatThaiDateTime, formatThaiDate } from '../lib/utils'
 
 export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, onToggleHighlight, role }) {
   const [highlightInFlight, setHighlightInFlight] = useState(false)
@@ -32,7 +32,7 @@ export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditR
       <td>
         <span className="cell-date">{formatThaiDateTime(tx.tx_datetime)}</span>
       </td>
-      <td><span className="cell-eff">{tx['effective_date'] ?? ''}</span></td>
+      <td><span className="cell-eff">{formatThaiDate(tx['effective_date'])}</span></td>
       <td>
         <span className="cell-desc" title={tx['description'] ?? ''}>
           {tx['description'] ?? '—'}
@@ -49,6 +49,17 @@ export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditR
         <td className="cell-balance">{formatBaht(tx['balance'])}</td>
       )}
       <td><span className="cell-channel">{tx['channel'] ?? ''}</span></td>
+      <td><span className="cell-branch">{tx['branch'] ?? ''}</span></td>
+      <td><span className="cell-location">{tx['location'] ?? ''}</span></td>
+      <td><span className="cell-terminal">{tx['terminal_id'] ?? ''}</span></td>
+      <td><span className="cell-narrative">{tx['narrative'] ?? ''}</span></td>
+      <td><span className="cell-counterparty">{tx['counterparty_name'] ?? ''}</span></td>
+      {role === ROLES.admin && (
+        <td><span className="cell-counterparty-account">{tx['counterparty_account'] ?? ''}</span></td>
+      )}
+      {role === ROLES.admin && (
+        <td className="cell-amt">{tx['fx_rate'] != null ? Number(tx['fx_rate']).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}</td>
+      )}
       <td>
         {canEdit ? (
           <button

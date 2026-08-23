@@ -15,6 +15,7 @@ export function useTransactions(role) {
     search: '', type: '', channel: '', dateFrom: '', dateTo: '',
     colDesc: '', colCheque: '', colMemo: '', colRemark: '',
     colChannel: '', colWithdraw: '', colDeposit: '', colBalance: '',
+    colCounterparty: '', colBranch: '', colLocation: '', colTerminal: '', colNarrative: '',
   })
   const [sort, setSort]                 = useState({ col: 'tx_datetime', dir: 'desc' })
   const [fullStats, setFullStats]       = useState({ withdraws: 0, deposits: 0 })
@@ -24,6 +25,7 @@ export function useTransactions(role) {
   const stateRef = useRef({ page, filters, sort })
   useEffect(() => { stateRef.current = { page, filters, sort } }, [page, filters, sort])
 
+  // Shared by get_transaction_stats_v2 and get_transactions_v2 (base 13 params).
   const buildFilterParams = useCallback((f = filters) => ({
     p_type:        f.type        || null,
     p_channel:     f.channel     || null,
@@ -39,6 +41,18 @@ export function useTransactions(role) {
     p_deposit:     f.colDeposit  ? Number(f.colDeposit)  : null,
     p_balance:     f.colBalance  ? Number(f.colBalance)  : null,
   }), [filters])
+
+  // get_transactions_v2 only — adds the statement-format-v2 column filters
+  // (#30). get_transaction_stats_v2 does not accept these params, so it
+  // must keep using buildFilterParams above.
+  const buildTransactionParams = useCallback((f = filters) => ({
+    ...buildFilterParams(f),
+    p_counterparty: f.colCounterparty || null,
+    p_branch:       f.colBranch       || null,
+    p_location:     f.colLocation     || null,
+    p_terminal:     f.colTerminal     || null,
+    p_narrative:    f.colNarrative    || null,
+  }), [filters, buildFilterParams])
 
   useEffect(() => {
     supabase.rpc('get_latest_balance').then(({ data }) => {
@@ -68,7 +82,7 @@ export function useTransactions(role) {
     setPage(1)
     setHasMore(false)
 
-    const params = buildFilterParams(newFilters)
+    const params = buildTransactionParams(newFilters)
     const { data, error, count } = await supabase
       .rpc('get_transactions_v2', params, { count: 'exact' })
       .order(newSort.col, { ascending: newSort.dir === 'asc' })
@@ -85,14 +99,14 @@ export function useTransactions(role) {
       setPage(2)
     }
     setIsLoading(false)
-  }, [addToast, buildFilterParams, filters, sort])
+  }, [addToast, buildTransactionParams, filters, sort])
 
   const loadMore = useCallback(async () => {
     if (isFetchingMore) return
     setIsFetchingMore(true)
 
     const { page: currentPage, filters: currentFilters, sort: currentSort } = stateRef.current
-    const params = buildFilterParams(currentFilters)
+    const params = buildTransactionParams(currentFilters)
     const from = (currentPage - 1) * PAGE_SIZE
     const to   = from + PAGE_SIZE - 1
 
@@ -117,7 +131,7 @@ export function useTransactions(role) {
       setPage(p => p + 1)
     }
     setIsFetchingMore(false)
-  }, [addToast, buildFilterParams, isFetchingMore, transactions.length])
+  }, [addToast, buildTransactionParams, isFetchingMore, transactions.length])
 
   useEffect(() => {
     resetAndLoad(filters, sort)
@@ -170,7 +184,7 @@ export function useTransactions(role) {
     addToast('กำลังเตรียมข้อมูล…', 'default')
     while (more) {
       const { data, error } = await supabase
-        .rpc('get_transactions_v2', buildFilterParams())
+        .rpc('get_transactions_v2', buildTransactionParams())
         .order(sort.col, { ascending: sort.dir === 'asc' })
         .order('id', { ascending: sort.dir !== 'asc' })
         .range(from, from + EXPORT_CHUNK - 1)
@@ -182,7 +196,7 @@ export function useTransactions(role) {
     if (!allRows.length) { addToast('ไม่มีข้อมูลที่จะส่งออก', 'default'); return }
     exportToCSV(allRows)
     addToast(`ส่งออก ${allRows.length.toLocaleString('th-TH')} รายการเรียบร้อย`, 'success')
-  }, [addToast, buildFilterParams, sort])
+  }, [addToast, buildTransactionParams, sort])
 
   const stats = {
     total:     totalCount,

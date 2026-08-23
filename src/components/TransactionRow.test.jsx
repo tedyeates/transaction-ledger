@@ -97,3 +97,123 @@ describe('TransactionRow highlight toggle visibility', () => {
     expect(screen.queryByRole('button', { name: 'Remove highlight' })).toBeNull()
   })
 })
+
+describe('TransactionRow counterparty display', () => {
+  // Counterparty name is bank-sourced descriptive data at the same
+  // sensitivity as description (statement-format-v2 design.md), so all
+  // three roles — admin, withdrawal, income — see the same cell. The masked
+  // account number is admin-only operational metadata (#30 acceptance
+  // criteria) and renders as its own column next to the name, not as a
+  // hover title on the name cell.
+  it.each([ROLES.admin, ROLES.withdraw, ROLES.deposit])(
+    'shows counterparty_name text for %s role',
+    (role) => {
+      const tr = renderRow({
+        role,
+        txOverrides: { counterparty_name: 'บจก. ชิโนซาวา (ประเทศไทย)', counterparty_account: '0942XXX148' },
+      })
+      const cell = tr.querySelector('.cell-counterparty')
+      expect(cell).not.toBeNull()
+      expect(cell.textContent).toBe('บจก. ชิโนซาวา (ประเทศไทย)')
+    }
+  )
+
+  it.each([ROLES.admin, ROLES.withdraw, ROLES.deposit])(
+    'renders an empty counterparty cell rather than hiding it for %s role when counterparty_name is null',
+    (role) => {
+      const tr = renderRow({ role, txOverrides: { counterparty_name: null, counterparty_account: null } })
+      const cell = tr.querySelector('.cell-counterparty')
+      expect(cell).not.toBeNull()
+      expect(cell.textContent).toBe('')
+    }
+  )
+
+  it('shows the masked counterparty account as its own visible column for admin, adjacent to counterparty name', () => {
+    const tr = renderRow({
+      role: ROLES.admin,
+      txOverrides: { counterparty_name: 'Example Counterparty', counterparty_account: '0942XXX148' },
+    })
+    const nameCell = tr.querySelector('.cell-counterparty')
+    const accountCell = tr.querySelector('.cell-counterparty-account')
+    expect(nameCell.textContent).toBe('Example Counterparty')
+    expect(accountCell).not.toBeNull()
+    expect(accountCell.textContent).toBe('0942XXX148')
+    // Adjacent columns: the account cell's <td> is the next sibling of the
+    // name cell's <td> (each is a <span> wrapped in its own <td>).
+    expect(nameCell.parentElement.nextElementSibling).toBe(accountCell.parentElement)
+  })
+
+  it.each([ROLES.withdraw, ROLES.deposit])(
+    'hides the counterparty_account column entirely for %s role',
+    (role) => {
+      const tr = renderRow({
+        role,
+        txOverrides: { counterparty_name: 'Example Counterparty', counterparty_account: '0942XXX148' },
+      })
+      expect(tr.querySelector('.cell-counterparty-account')).toBeNull()
+      expect(tr.textContent).not.toContain('0942XXX148')
+    }
+  )
+})
+
+
+describe('TransactionRow bank-descriptive columns (branch, location, terminal, narrative)', () => {
+  // Branch, location, terminal ID, and narrative are bank-sourced descriptive
+  // data at the same sensitivity as description/counterparty_name (#30), so
+  // all three roles see the same cells.
+  it.each([ROLES.admin, ROLES.withdraw, ROLES.deposit])(
+    'shows branch, location, terminal_id and narrative text for %s role',
+    (role) => {
+      const tr = renderRow({
+        role,
+        txOverrides: {
+          branch: 'HEAD OFFICE',
+          location: 'Sathorn',
+          terminal_id: '004286',
+          narrative: 'Bank narrative text',
+        },
+      })
+      expect(tr.querySelector('.cell-branch').textContent).toBe('HEAD OFFICE')
+      expect(tr.querySelector('.cell-location').textContent).toBe('Sathorn')
+      expect(tr.querySelector('.cell-terminal').textContent).toBe('004286')
+      expect(tr.querySelector('.cell-narrative').textContent).toBe('Bank narrative text')
+    }
+  )
+
+  it.each([ROLES.admin, ROLES.withdraw, ROLES.deposit])(
+    'renders empty branch/location/terminal/narrative cells rather than hiding them for %s role when null',
+    (role) => {
+      const tr = renderRow({
+        role,
+        txOverrides: { branch: null, location: null, terminal_id: null, narrative: null },
+      })
+      expect(tr.querySelector('.cell-branch').textContent).toBe('')
+      expect(tr.querySelector('.cell-location').textContent).toBe('')
+      expect(tr.querySelector('.cell-terminal').textContent).toBe('')
+      expect(tr.querySelector('.cell-narrative').textContent).toBe('')
+    }
+  )
+})
+
+describe('TransactionRow admin-only operational metadata (fx_rate)', () => {
+  it('shows fx_rate for admin', () => {
+    const tr = renderRow({
+      role: ROLES.admin,
+      txOverrides: { fx_rate: 33.5 },
+    })
+    // fx_rate cell has no dedicated class beyond cell-amt; assert via td order
+    // is brittle, so assert the formatted value appears somewhere in the row.
+    expect(tr.textContent).toContain('33.50')
+  })
+
+  it.each([ROLES.withdraw, ROLES.deposit])(
+    'hides fx_rate for %s role',
+    (role) => {
+      const tr = renderRow({
+        role,
+        txOverrides: { fx_rate: 33.5 },
+      })
+      expect(tr.textContent).not.toContain('33.50')
+    }
+  )
+})

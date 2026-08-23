@@ -1,33 +1,53 @@
 import { useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { PREVIEW_COLS } from '../lib/constants'
-import { parseBankCSV } from '../lib/utils'
+import { parseBankCSV, SOURCE_FORMATS, DEFAULT_STATEMENT_FORMAT } from '../lib/csv'
 import { useToast } from '../hooks/useToast'
 import { Modal } from './Modal'
 
+const AUTO_OPTION = { id: 'auto', label: 'ตรวจจับอัตโนมัติ' }
+const FORMAT_OPTIONS = [...SOURCE_FORMATS, AUTO_OPTION]
+
 export function ImportModal({ onClose, onImported }) {
+  const [format, setFormat] = useState(DEFAULT_STATEMENT_FORMAT)
   const [parsedRows, setParsedRows] = useState(null)
+  const [usedFormat, setUsedFormat] = useState(null)
   const [error, setError]           = useState('')
   const [importing, setImporting]   = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const fileRef = useRef(null)
+  const currentFileRef = useRef(null)
   const addToast = useToast()
+
+  const parseArrayBuffer = (arrayBuffer, selectedFormat) => {
+    setError('')
+    setParsedRows(null)
+    setUsedFormat(null)
+    try {
+      const { format: resolvedFormat, rows } = parseBankCSV(arrayBuffer, { format: selectedFormat })
+      setParsedRows(rows)
+      setUsedFormat(resolvedFormat)
+    } catch (err) {
+      console.error('CSV parse error:', err)
+      setError(err.message)
+    }
+  }
 
   const handleFile = file => {
     if (!file) return
-    setError('')
-    setParsedRows(null)
+    currentFileRef.current = file
     const reader = new FileReader()
-    reader.onload = e => {
-      try {
-        const rows = parseBankCSV(e.target.result)
-        setParsedRows(rows)
-      } catch (err) {
-        console.error('CSV parse error:', err)
-        setError(err.message)
-      }
-    }
+    reader.onload = e => parseArrayBuffer(e.target.result, format)
     reader.readAsArrayBuffer(file)
+  }
+
+  const handleFormatChange = newFormat => {
+    setFormat(newFormat)
+    if (currentFileRef.current) {
+      const reader = new FileReader()
+      reader.onload = e => parseArrayBuffer(e.target.result, newFormat)
+      reader.readAsArrayBuffer(currentFileRef.current)
+    }
   }
 
   const handleDrop = e => {
@@ -75,10 +95,24 @@ export function ImportModal({ onClose, onImported }) {
       }
     >
       <p className="import-note">
-        รองรับไฟล์ CSV จากธนาคารกสิกร (TIS-620)<br />
+        รองรับไฟล์ CSV จากธนาคารกสิกร ทั้งรูปแบบเดิม (TIS-620) และรูปแบบใหม่ (English/Gregorian)<br />
         ระบบจะข้ามแถวก่อนหัวตาราง และหยุดที่แถวที่ไม่มีวันที่<br />
-        รายการซ้ำ (วันที่ + ยอดคงเหลือเดิม) จะถูกข้ามโดยอัตโนมัติ
+        รายการซ้ำ (นาทีเดียวกันกับรายการที่มีอยู่แล้ว) จะถูกข้ามโดยอัตโนมัติ
       </p>
+
+      <label className="format-select-label" htmlFor="statement-format-select">
+        รูปแบบไฟล์
+      </label>
+      <select
+        id="statement-format-select"
+        className="format-select"
+        value={format}
+        onChange={e => handleFormatChange(e.target.value)}
+      >
+        {FORMAT_OPTIONS.map(f => (
+          <option key={f.id} value={f.id}>{f.label}</option>
+        ))}
+      </select>
 
       <div
         className={`dropzone ${dragActive ? 'dropzone-active' : ''}`}
@@ -123,6 +157,7 @@ export function ImportModal({ onClose, onImported }) {
             </table>
           </div>
           <div className="preview-info">
+            อ่านเป็นรูปแบบ: {SOURCE_FORMATS.find(f => f.id === usedFormat)?.label ?? usedFormat} —{' '}
             {parsedRows.length} รายการพร้อมนำเข้า — รายการซ้ำจะถูกข้ามโดยอัตโนมัติ
           </div>
         </>
