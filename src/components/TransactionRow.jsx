@@ -50,6 +50,10 @@ export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditR
       )}
       <td><span className="cell-channel">{tx['channel'] ?? ''}</span></td>
       <td><span className="cell-counterparty" title={tx['counterparty_account'] ?? ''}>{tx['counterparty_name'] ?? ''}</span></td>
+      <td><span className="cell-branch">{tx['branch'] ?? ''}</span></td>
+      <td><span className="cell-location">{tx['location'] ?? ''}</span></td>
+      <td><span className="cell-terminal">{tx['terminal_id'] ?? ''}</span></td>
+      <td><span className="cell-narrative">{tx['narrative'] ?? ''}</span></td>
       <td>
         {canEdit ? (
           <button
@@ -81,6 +85,18 @@ export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditR
             }
           </button>
         </td>
+      )}
+      {role === ROLES.admin && (
+        <td><span className="cell-counterparty-account">{tx['counterparty_account'] ?? ''}</span></td>
+      )}
+      {role === ROLES.admin && (
+        <td className="cell-amt">{tx['fx_rate'] != null ? Number(tx['fx_rate']).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}</td>
+      )}
+      {role === ROLES.admin && (
+        <td><span className="cell-statement-format">{tx['statement_format'] ?? ''}</span></td>
+      )}
+      {role === ROLES.admin && (
+        <td><span className="cell-exported-at">{formatThaiDateTime(tx['statement_exported_at'])}</span></td>
       )}
       {role === ROLES.admin && (
         <td className="cell-highlight-toggle">

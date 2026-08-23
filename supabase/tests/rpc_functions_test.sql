@@ -3,7 +3,7 @@
 
 BEGIN;
 
-SELECT plan(58);
+SELECT plan(67);
 
 -- =============================================================================
 -- HELPERS: Simulate authenticated users via JWT claims
@@ -70,7 +70,8 @@ SELECT ok(
   (SELECT count(*) FROM public.get_transactions_v2(
     NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
     NULL::text, NULL::text, NULL::text, NULL::text,
-    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
   )) > 0,
   'get_transactions_v2: admin sees rows'
 );
@@ -79,7 +80,8 @@ SELECT ok(
   (SELECT count(DISTINCT type) FROM public.get_transactions_v2(
     NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
     NULL::text, NULL::text, NULL::text, NULL::text,
-    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
   )) = 2,
   'get_transactions_v2: admin sees both types'
 );
@@ -91,7 +93,8 @@ SELECT ok(
   (SELECT count(*) FROM public.get_transactions_v2(
     NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
     NULL::text, NULL::text, NULL::text, NULL::text,
-    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
   )) > 0,
   'get_transactions_v2: withdrawal user sees rows'
 );
@@ -100,7 +103,8 @@ SELECT ok(
   (SELECT count(*) FROM public.get_transactions_v2(
     NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
     NULL::text, NULL::text, NULL::text, NULL::text,
-    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
   ) WHERE type != 'withdrawal') = 0,
   'get_transactions_v2: withdrawal user sees only withdrawal rows'
 );
@@ -112,7 +116,8 @@ SELECT ok(
   (SELECT count(*) FROM public.get_transactions_v2(
     NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
     NULL::text, NULL::text, NULL::text, NULL::text,
-    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
   )) > 0,
   'get_transactions_v2: income user sees rows'
 );
@@ -121,7 +126,8 @@ SELECT ok(
   (SELECT count(*) FROM public.get_transactions_v2(
     NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
     NULL::text, NULL::text, NULL::text, NULL::text,
-    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
   ) WHERE type != 'income') = 0,
   'get_transactions_v2: income user sees only income rows'
 );
@@ -133,7 +139,8 @@ SELECT ok(
   (SELECT count(*) FROM public.get_transactions_v2(
     'withdrawal'::text, NULL::text, NULL::text, NULL::text, NULL::text,
     NULL::text, NULL::text, NULL::text, NULL::text,
-    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
   ) WHERE type != 'withdrawal') = 0,
   'get_transactions_v2: p_type filter works'
 );
@@ -287,7 +294,8 @@ SELECT ok(
   (SELECT count(*) FROM public.get_transactions_v2(
     NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
     NULL::text, NULL::text, NULL::text, NULL::text,
-    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
   ) WHERE balance IS NOT NULL OR remark IS NOT NULL) = 0,
   'get_transactions_v2: accountant gets NULL balance and remark on every row'
 );
@@ -299,9 +307,91 @@ SELECT ok(
   (SELECT count(*) FROM public.get_transactions_v2(
     NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
     NULL::text, NULL::text, NULL::text, NULL::text,
-    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
   ) WHERE balance IS NOT NULL) > 0,
   'get_transactions_v2: admin gets populated balance'
+);
+
+-- =============================================================================
+-- TEST: get_transactions_v2 new statement-format-v2 columns (issue #30)
+-- =============================================================================
+
+-- Descriptive fields (counterparty_name, branch, location, terminal_id,
+-- narrative) are bank-sourced data at the same sensitivity as description,
+-- so accountants see the same (unmasked) values as admin for the same rows
+-- — no CASE WHEN masking on these four, unlike balance/remark/the
+-- operational metadata below.
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000002'::uuid);
+
+SELECT ok(
+  (SELECT array_agg(counterparty_name ORDER BY id) FROM public.get_transactions_v2(
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
+  ) WHERE type = 'withdrawal')
+  IS DISTINCT FROM NULL,
+  'get_transactions_v2: descriptive columns are queryable for accountant without error'
+);
+
+-- Capture admin's unmasked counterparty_name values first (admin is the
+-- known-good reference — the balance/remark masking tests above already
+-- prove admin gets real, unmasked data).
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001'::uuid);
+
+SELECT set_config(
+  'tests.admin_counterparty_names',
+  (SELECT array_agg(counterparty_name ORDER BY id)::text FROM public.get_transactions_v2(
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
+  ) WHERE type = 'withdrawal'),
+  false
+);
+
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000002'::uuid);
+
+SELECT is(
+  (SELECT array_agg(counterparty_name ORDER BY id)::text FROM public.get_transactions_v2(
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
+  ) WHERE type = 'withdrawal'),
+  current_setting('tests.admin_counterparty_names'),
+  'get_transactions_v2: accountant sees the same unmasked counterparty_name values as admin (not nulled)'
+);
+
+-- Operational metadata (counterparty_account, fx_rate, statement_format,
+-- statement_exported_at) is NULL for every row when queried as an accountant.
+SELECT ok(
+  (SELECT count(*) FROM public.get_transactions_v2(
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
+  ) WHERE counterparty_account IS NOT NULL
+       OR fx_rate IS NOT NULL
+       OR statement_format IS NOT NULL
+       OR statement_exported_at IS NOT NULL) = 0,
+  'get_transactions_v2: accountant gets NULL counterparty_account, fx_rate, statement_format, statement_exported_at on every row'
+);
+
+-- Admin sees the operational metadata populated (seed/import data has
+-- non-null statement_format at minimum, since import_transactions always
+-- sets it).
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001'::uuid);
+
+SELECT ok(
+  (SELECT count(*) FROM public.get_transactions_v2(
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
+  ) WHERE statement_format IS NOT NULL) > 0,
+  'get_transactions_v2: admin gets populated statement_format'
 );
 
 -- =============================================================================
@@ -318,6 +408,17 @@ SELECT is_empty(
   'get_transactions_v2: 9-parameter overload no longer exists'
 );
 
+-- The pre-#30 13-parameter overload (no p_counterparty/p_branch/p_location/
+-- p_terminal/p_narrative) was dropped and replaced by the 18-parameter
+-- version below (issue #30) — assert only the 18-parameter version exists.
+SELECT is_empty(
+  $$SELECT p.oid FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'get_transactions_v2'
+    AND pg_get_function_identity_arguments(p.oid) NOT LIKE '%p_narrative%'$$,
+  'get_transactions_v2: pre-#30 13-parameter overload no longer exists'
+);
+
 SELECT is_empty(
   $$SELECT p.oid FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -331,9 +432,15 @@ SELECT ok(
   'anon has no EXECUTE on get_transaction_stats_v2'
 );
 
+-- Issue #30 widened get_transactions_v2 to 18 parameters (added
+-- p_counterparty, p_branch, p_location, p_terminal, p_narrative). The new
+-- function, like the one it replaced, must not inherit anon/PUBLIC EXECUTE —
+-- the #21 ALTER DEFAULT PRIVILEGES change (scoped to role postgres, which
+-- migrations run as) stops that inheritance for every function created
+-- since, and this migration only explicitly grants authenticated/service_role.
 SELECT ok(
-  NOT has_function_privilege('anon', 'public.get_transactions_v2(text,text,text,text,text,text,text,text,text,text,numeric,numeric,numeric)', 'EXECUTE'),
-  'anon has no EXECUTE on get_transactions_v2'
+  NOT has_function_privilege('anon', 'public.get_transactions_v2(text,text,text,text,text,text,text,text,text,text,numeric,numeric,numeric,text,text,text,text,text)', 'EXECUTE'),
+  'anon has no EXECUTE on get_transactions_v2 (18-parameter, post-#30)'
 );
 
 SELECT ok(
@@ -659,6 +766,61 @@ SELECT results_eq(
             'MOBILE_PHONE_BANKING'::text, '2933140'::text,
             '2026-08-21T10:49:45Z'::timestamptz)$$,
   'import_transactions: every new bank field round-trips through the real RPC, not a mock'
+);
+
+-- =============================================================================
+-- TEST: get_transactions_v2 search and channel filter reach the new
+-- statement-format-v2 fields (issue #30)
+-- =============================================================================
+
+-- p_search matches counterparty_name, not just description/memo/cheque/channel.
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000003'::uuid);
+
+SELECT ok(
+  (SELECT count(*) FROM public.get_transactions_v2(
+    NULL::text, NULL::text, NULL::text, NULL::text, 'ชิโนซาวา'::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
+  ) WHERE description = 'new fields round trip') = 1,
+  'get_transactions_v2: p_search matches counterparty_name'
+);
+
+-- p_search matches narrative too.
+SELECT ok(
+  (SELECT count(*) FROM public.get_transactions_v2(
+    NULL::text, NULL::text, NULL::text, NULL::text, 'Bank narrative text'::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
+  ) WHERE description = 'new fields round trip') = 1,
+  'get_transactions_v2: p_search matches narrative'
+);
+
+-- p_col_channel filters on channel_code (normalised), not raw channel text —
+-- a filter of 'MOB' must match this row whose raw channel is the English
+-- prose 'Mobile Phone Banking', so one selection spans both statement
+-- formats instead of splitting the ledger at the switchover date.
+SELECT ok(
+  (SELECT count(*) FROM public.get_transactions_v2(
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    'MOBILE_PHONE_BANKING'::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
+  ) WHERE description = 'new fields round trip') = 1,
+  'get_transactions_v2: p_col_channel matches on normalised channel_code'
+);
+
+-- The row's raw channel text is still what the table would display —
+-- filtering does not rewrite the displayed value.
+SELECT ok(
+  (SELECT channel FROM public.get_transactions_v2(
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
+    NULL::text, NULL::text, NULL::text, NULL::text,
+    'MOBILE_PHONE_BANKING'::text, NULL::numeric, NULL::numeric, NULL::numeric,
+    NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
+  ) WHERE description = 'new fields round trip') = 'Mobile Phone Banking',
+  'get_transactions_v2: raw channel text is unchanged by the channel_code filter'
 );
 
 -- =============================================================================

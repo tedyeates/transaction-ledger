@@ -137,3 +137,79 @@ describe('TransactionRow counterparty display', () => {
     expect(cell.textContent).not.toContain('0942XXX148')
   })
 })
+
+describe('TransactionRow bank-descriptive columns (branch, location, terminal, narrative)', () => {
+  // Branch, location, terminal ID, and narrative are bank-sourced descriptive
+  // data at the same sensitivity as description/counterparty_name (#30), so
+  // all three roles see the same cells.
+  it.each([ROLES.admin, ROLES.withdraw, ROLES.deposit])(
+    'shows branch, location, terminal_id and narrative text for %s role',
+    (role) => {
+      const tr = renderRow({
+        role,
+        txOverrides: {
+          branch: 'HEAD OFFICE',
+          location: 'Sathorn',
+          terminal_id: '004286',
+          narrative: 'Bank narrative text',
+        },
+      })
+      expect(tr.querySelector('.cell-branch').textContent).toBe('HEAD OFFICE')
+      expect(tr.querySelector('.cell-location').textContent).toBe('Sathorn')
+      expect(tr.querySelector('.cell-terminal').textContent).toBe('004286')
+      expect(tr.querySelector('.cell-narrative').textContent).toBe('Bank narrative text')
+    }
+  )
+
+  it.each([ROLES.admin, ROLES.withdraw, ROLES.deposit])(
+    'renders empty branch/location/terminal/narrative cells rather than hiding them for %s role when null',
+    (role) => {
+      const tr = renderRow({
+        role,
+        txOverrides: { branch: null, location: null, terminal_id: null, narrative: null },
+      })
+      expect(tr.querySelector('.cell-branch').textContent).toBe('')
+      expect(tr.querySelector('.cell-location').textContent).toBe('')
+      expect(tr.querySelector('.cell-terminal').textContent).toBe('')
+      expect(tr.querySelector('.cell-narrative').textContent).toBe('')
+    }
+  )
+})
+
+describe('TransactionRow admin-only operational metadata (counterparty_account, fx_rate, statement_format, statement_exported_at)', () => {
+  it('shows counterparty_account, fx_rate, statement_format and statement_exported_at for admin', () => {
+    const tr = renderRow({
+      role: ROLES.admin,
+      txOverrides: {
+        counterparty_account: '0942XXX148',
+        fx_rate: 33.5,
+        statement_format: 'english_v2',
+        statement_exported_at: '2026-08-21T10:49:45Z',
+      },
+    })
+    expect(tr.querySelector('.cell-counterparty-account').textContent).toBe('0942XXX148')
+    expect(tr.querySelector('.cell-statement-format').textContent).toBe('english_v2')
+    expect(tr.querySelector('.cell-exported-at').textContent).not.toBe('')
+    // fx_rate cell has no dedicated class beyond cell-amt; assert via td order
+    // is brittle, so assert the formatted value appears somewhere in the row.
+    expect(tr.textContent).toContain('33.50')
+  })
+
+  it.each([ROLES.withdraw, ROLES.deposit])(
+    'hides counterparty_account, fx_rate, statement_format and statement_exported_at cells for %s role',
+    (role) => {
+      const tr = renderRow({
+        role,
+        txOverrides: {
+          counterparty_account: '0942XXX148',
+          fx_rate: 33.5,
+          statement_format: 'english_v2',
+          statement_exported_at: '2026-08-21T10:49:45Z',
+        },
+      })
+      expect(tr.querySelector('.cell-counterparty-account')).toBeNull()
+      expect(tr.querySelector('.cell-statement-format')).toBeNull()
+      expect(tr.querySelector('.cell-exported-at')).toBeNull()
+    }
+  )
+})
