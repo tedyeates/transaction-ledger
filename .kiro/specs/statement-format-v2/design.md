@@ -256,3 +256,48 @@ Stored, not displayed differently. Every fixture row is THB with `fx_rate` `0.00
 - Open question: whether accountants should see `counterparty_account` (masked) or only `counterparty_name`. Spec currently grants both.
 - `texport.csv:Zone.Identifier` in the repo root is a WSL download artefact and should be deleted, not committed.
 - Fixture facts worth keeping handy: 95 lines, 92 transactions, 82 distinct timestamps, 6 distinct channels, 10 branches, 27 terminal IDs, 12 rows with a counterparty, `Narrative` and `FX Rate` empty/zero throughout.
+
+## Changelog
+
+### Post-#30: main table column layout revised
+
+Issue #30 implemented the RPC and column-visibility side of this spec
+(`get_transactions_v2` extended to 18 params, search/channel-filter reach
+the new fields, role-based masking). A follow-up pass revised the main
+table's column layout and trimmed two columns that shipped with #30:
+
+- **`counterparty_name` moved next to `counterparty_account`.** Previously
+  `counterparty_name` (คู่ค้า) sat right after the channel column, with
+  `counterparty_account` (เลขที่บัญชีคู่ค้า) further down in the admin-only
+  block. They are now adjacent: `channel → branch → location → terminal_id →
+  narrative → counterparty_name → counterparty_account (admin) → fx_rate
+  (admin)`. This resolves the open question above ("whether accountants
+  should see `counterparty_account`") in favour of admin-only, matching
+  #30's acceptance criteria rather than this spec's original "grants both"
+  note — the acceptance criteria is the binding decision.
+- **Editable/admin-annotated columns moved to the end of the table.**
+  `memo` (รายการ, editable by the owning accountant role), `remark`
+  (หมายเหตุ, admin-only editable), and the highlight toggle (★, admin-only)
+  now render last, after every bank-sourced descriptive and operational
+  column, instead of being interleaved with them. Column order is now:
+  all read-only bank data → memo → remark → highlight.
+- **`statement_format` column removed from the table.** The "source"
+  column (รูปแบบใบแจ้งยอด, e.g. `english_v2` / `thai_legacy`) added no
+  actionable information for day-to-day use and was removed from
+  `TransactionRow`/`TransactionTable`. The `statement_format` column
+  and the RPC's admin-only masking of it are unchanged at the database
+  and RPC layer — only the UI column was dropped. Re-adding it is a
+  UI-only change if it's needed again later.
+- **`statement_exported_at` column removed from the table.** The "uploaded
+  date" column (เวลาส่งออกใบแจ้งยอด) was removed for the same reason.
+  Unchanged at the database/RPC layer.
+- The previous "masked account as hover title on the name cell" behaviour
+  (`title` attribute on `.cell-counterparty` showing `counterparty_account`)
+  is removed now that the account renders as its own visible admin-only
+  column — the title-attribute masking was a stand-in for the account not
+  having its own column yet.
+- No RPC, migration, or search/filter changes were needed for this pass —
+  `get_transactions_v2` still returns `statement_format` and
+  `statement_exported_at` (masked to admin), and column filters for
+  branch/location/terminal/narrative/counterparty are unchanged. This was
+  a `TransactionTable.jsx`/`TransactionRow.jsx`/test-only change.
