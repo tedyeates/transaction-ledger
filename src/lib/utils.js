@@ -28,7 +28,7 @@ export function exportToCSV(transactions) {
   const headers = [
     'วันที่ทำรายการ', 'วันที่มีผล', 'คำอธิบาย', 'เลขที่เช็ค',
     'หักบัญชี', 'เข้าบัญชี', 'ยอดคงเหลือ', 'ช่องทาง', 'รายการ', 'หมายเหตุ',
-    'สาขา', 'ที่ตั้ง', 'รหัสเครื่อง', 'คู่ค้า', 'เลขที่บัญชีคู่ค้า',
+    'สาขา', 'ที่ตั้ง', 'รหัสเครื่อง', 'หมายเหตุธนาคาร', 'คู่ค้า', 'เลขที่บัญชีคู่ค้า',
     'สกุลเงิน', 'อัตราแลกเปลี่ยน', 'รูปแบบใบแจ้งยอด',
   ]
 
@@ -46,6 +46,7 @@ export function exportToCSV(transactions) {
     tx.branch ?? '',
     tx.location ?? '',
     tx.terminal_id ?? '',
+    tx.narrative ?? '',
     tx.counterparty_name ?? '',
     tx.counterparty_account ?? '',
     tx.currency ?? '',
