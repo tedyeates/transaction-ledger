@@ -14,7 +14,8 @@ export function formatThaiDateTime(isoString) {
   const y = date.getUTCFullYear() + 543
   const h = String(date.getUTCHours()).padStart(2, '0')
   const min = String(date.getUTCMinutes()).padStart(2, '0')
-  return `${d}/${m}/${y} ${h}:${min}`
+  const s = String(date.getUTCSeconds()).padStart(2, '0')
+  return `${d}/${m}/${y} ${h}:${min}:${s}`
 }
 
 export function formatThaiDate(dateString) {

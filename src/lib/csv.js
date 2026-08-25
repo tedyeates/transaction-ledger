@@ -15,18 +15,23 @@ import { THAI_MONTHS } from './constants'
 export const STATEMENT_FORMATS = {
   thai_legacy: {
     id: 'thai_legacy',
-    label: 'ไทย / TIS-620 (เดิม)',
+    label: 'Legacy',
   },
   english_v2: {
     id: 'english_v2',
-    label: 'English / Gregorian (ใหม่)',
+    label: 'New 24hr',
+  },
+  english_v2_12h: {
+    id: 'english_v2_12h',
+    label: 'New 12hr',
   },
 }
 
-export const DEFAULT_STATEMENT_FORMAT = 'english_v2'
+export const DEFAULT_STATEMENT_FORMAT = 'english_v2_12h'
 
 // Ordered for display in the format select box.
 export const SOURCE_FORMATS = [
+  STATEMENT_FORMATS.english_v2_12h,
   STATEMENT_FORMATS.english_v2,
   STATEMENT_FORMATS.thai_legacy,
 ]
@@ -43,8 +48,15 @@ function stripBOM(text) {
 }
 
 /**
- * Detect which statement format a decoded CSV text is. Returns a format id
- * or null if neither format's header signature is found.
+ * Detect which statement format family a decoded CSV text belongs to.
+ * Returns a format id or null if no known header signature is found.
+ *
+ * english_v2 and english_v2_12h share an identical header row (only the
+ * date/time cell values differ — 12hr vs 24hr, 2- vs 4-digit year), so this
+ * can only resolve to the 'english_v2' family, not distinguish the two
+ * dialects. It exists solely to guard an explicit selection against a
+ * mismatched file (e.g. picking a v2 format for a thai_legacy file), not to
+ * drive auto-detection — there is no 'auto' option in the UI.
  */
 export function detectStatementFormat(text) {
   const stripped = stripBOM(text)
@@ -167,6 +179,42 @@ export function gregorianDateToISO(str) {
   if (!match) return null
   const [, d, m, y] = match
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+}
+
+/**
+ * New English/Gregorian 12hr datetime (english_v2_12h): "24-08-26 02:37:39
+ * pm" (DD-MM-YY, 2-digit Gregorian year, 12hr clock with am/pm, second
+ * precision). The 2-digit year is Gregorian (not Buddhist era, unlike
+ * thai_legacy) — "26" means 2026, per the same export dialect as
+ * english_v2's 4-digit year. Returns an ISO-shaped local datetime string.
+ */
+export function gregorianDateTime12hToISO(str) {
+  if (!str) return null
+  const match = str.trim().match(/^(\d{1,2})-(\d{1,2})-(\d{2})\s+(\d{1,2}):(\d{2}):(\d{2})\s*(am|pm)$/i)
+  if (!match) return null
+  const [, d, m, yRaw, hRaw, min, s, meridiem] = match
+  const year = 2000 + parseInt(yRaw, 10)
+
+  let hour = parseInt(hRaw, 10)
+  if (hour < 1 || hour > 12) return null
+  const isPM = meridiem.toLowerCase() === 'pm'
+  if (hour === 12) hour = isPM ? 12 : 0
+  else if (isPM) hour += 12
+
+  return `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${min}:${s}`
+}
+
+/**
+ * New English/Gregorian 12hr date-only value: "24-08-26" (DD-MM-YY,
+ * 2-digit Gregorian year). Returns ISO YYYY-MM-DD.
+ */
+export function gregorianDate12hToISO(str) {
+  if (!str) return null
+  const match = str.trim().match(/^(\d{1,2})-(\d{1,2})-(\d{2})$/)
+  if (!match) return null
+  const [, d, m, yRaw] = match
+  const year = 2000 + parseInt(yRaw, 10)
+  return `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
 /**
@@ -300,7 +348,7 @@ const V2_HEADERS = [
   'Counter Party Account Name', 'Counter Party Account Number', 'FX Rate',
 ]
 
-function parseEnglishV2(arrayBuffer) {
+function parseEnglishV2Family(arrayBuffer, { formatId, dateTimeToISO, dateToISO }) {
   const text = stripBOM(new TextDecoder('utf-8').decode(new Uint8Array(arrayBuffer)))
   const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
 
@@ -308,7 +356,7 @@ function parseEnglishV2(arrayBuffer) {
   let exportedAt = null
   if (lines[1]) {
     const preambleCols = splitCSVLine(lines[1])
-    exportedAt = gregorianDateTimeToISO(preambleCols[0]?.trim())
+    exportedAt = dateTimeToISO(preambleCols[0]?.trim())
   }
 
   let headerIndex = -1
@@ -347,8 +395,8 @@ function parseEnglishV2(arrayBuffer) {
     const currency = debit.currency || credit.currency || balance.currency || 'THB'
 
     return {
-      tx_datetime: gregorianDateTimeToISO(r['Transaction Date and Time']),
-      effective_date: gregorianDateToISO(r['Value Date']) || null,
+      tx_datetime: dateTimeToISO(r['Transaction Date and Time']),
+      effective_date: dateToISO(r['Value Date']) || null,
       description: r['Description'] || null,
       cheque_number: r['Cheque Number'] || null,
       withdraw,
@@ -366,11 +414,37 @@ function parseEnglishV2(arrayBuffer) {
       narrative: r['Narrative'] || null,
       counterparty_name: r['Counter Party Account Name'] || null,
       counterparty_account: r['Counter Party Account Number'] || null,
-      statement_format: 'english_v2',
+      statement_format: formatId,
     }
   })
 
   return { rows, exportedAt }
+}
+
+/**
+ * New English/Gregorian format, 24hr dialect (english_v2): "21/08/2026
+ * 10:30:57" (D/M/YYYY, 4-digit Gregorian year, 24hr clock).
+ */
+function parseEnglishV2(arrayBuffer) {
+  return parseEnglishV2Family(arrayBuffer, {
+    formatId: 'english_v2',
+    dateTimeToISO: gregorianDateTimeToISO,
+    dateToISO: gregorianDateToISO,
+  })
+}
+
+/**
+ * New English/Gregorian format, 12hr dialect (english_v2_12h): "24-08-26
+ * 10:30:57 am" (DD-MM-YY, 2-digit Gregorian year, 12hr clock with am/pm).
+ * Same column layout as english_v2 — only the date/time cell format
+ * differs — so this reuses the shared row-mapping logic wholesale.
+ */
+function parseEnglishV2_12h(arrayBuffer) {
+  return parseEnglishV2Family(arrayBuffer, {
+    formatId: 'english_v2_12h',
+    dateTimeToISO: gregorianDateTime12hToISO,
+    dateToISO: gregorianDate12hToISO,
+  })
 }
 
 // =============================================================================
@@ -380,7 +454,17 @@ function parseEnglishV2(arrayBuffer) {
 const PARSERS = {
   thai_legacy: parseThaiLegacy,
   english_v2: parseEnglishV2,
+  english_v2_12h: parseEnglishV2_12h,
 }
+
+/**
+ * Format ids that share the english_v2 header signature, and therefore all
+ * resolve to detected === 'english_v2' during the mismatch guard below.
+ * Keeps that guard from false-flagging english_v2_12h selections just
+ * because detectStatementFormat can't tell the two v2 dialects apart from
+ * header text alone.
+ */
+const ENGLISH_V2_FAMILY = ['english_v2', 'english_v2_12h']
 
 /**
  * Stamp the file-level export timestamp onto every row as
@@ -396,41 +480,36 @@ function stampExportedAt(rows, exportedAt) {
 }
 
 /**
- * Parse bank CSV bytes under a chosen (or auto-detected) statement format.
+ * Parse bank CSV bytes under a chosen statement format.
  *
  * @param {ArrayBuffer} arrayBuffer
- * @param {{ format?: string }} options - format id from STATEMENT_FORMATS,
- *   or 'auto' to defer entirely to header detection. Defaults to
- *   DEFAULT_STATEMENT_FORMAT.
+ * @param {{ format?: string }} options - format id from STATEMENT_FORMATS.
+ *   Defaults to DEFAULT_STATEMENT_FORMAT.
  * @returns {{ format: string, exportedAt: string|null, rows: object[] }}
  */
 export function parseBankCSV(arrayBuffer, options = {}) {
   const { format = DEFAULT_STATEMENT_FORMAT } = options
 
-  // Detection always runs and is used either to resolve 'auto' or to guard
-  // an explicit selection against a mismatched file. Sniff using whichever
-  // decoding lets us see the header signature; both formats' signatures are
-  // ASCII/UTF-8-safe so a UTF-8 decode is sufficient for detection alone.
-  const sniffText = new TextDecoder('utf-8').decode(new Uint8Array(arrayBuffer))
-  const detected = detectStatementFormat(sniffText)
-
-  if (format === 'auto') {
-    if (!detected) {
-      throw new Error(`ไม่รู้จักรูปแบบไฟล์นี้ — รองรับเฉพาะ: ${formatSupportList()}`)
-    }
-    const { rows, exportedAt } = PARSERS[detected](arrayBuffer)
-    return { format: detected, exportedAt, rows: stampExportedAt(rows, exportedAt) }
-  }
-
   if (!PARSERS[format]) {
     throw new Error(`ไม่รู้จักรูปแบบไฟล์ที่เลือก: ${format} — รองรับเฉพาะ: ${formatSupportList()}`)
   }
 
-  if (detected && detected !== format) {
+  // Detection guards an explicit selection against a mismatched file (e.g.
+  // picking a v2 format for a thai_legacy file, or vice versa). Sniff using
+  // whichever decoding lets us see the header signature; both formats'
+  // signatures are ASCII/UTF-8-safe so a UTF-8 decode is sufficient.
+  const sniffText = new TextDecoder('utf-8').decode(new Uint8Array(arrayBuffer))
+  const detected = detectStatementFormat(sniffText)
+
+  const isMismatch = detected
+    && detected !== format
+    && !(ENGLISH_V2_FAMILY.includes(detected) && ENGLISH_V2_FAMILY.includes(format))
+
+  if (isMismatch) {
     const selectedLabel = STATEMENT_FORMATS[format]?.label ?? format
     const detectedLabel = STATEMENT_FORMATS[detected]?.label ?? detected
     throw new Error(
-      `ไฟล์นี้ดูเหมือนรูปแบบ "${detectedLabel}" แต่เลือกไว้เป็น "${selectedLabel}" — กรุณาเลือกรูปแบบให้ถูกต้องหรือใช้ตรวจจับอัตโนมัติ`
+      `ไฟล์นี้ดูเหมือนรูปแบบ "${detectedLabel}" แต่เลือกไว้เป็น "${selectedLabel}" — กรุณาเลือกรูปแบบให้ถูกต้อง`
     )
   }
 

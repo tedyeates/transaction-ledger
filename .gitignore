@@ -30,4 +30,4 @@ dist-ssr
 .backup
 
 # Bank statement exports contain real financial data — never commit
-texport.csv
+.fixture

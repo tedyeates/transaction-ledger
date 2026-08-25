@@ -5,9 +5,6 @@ import { parseBankCSV, SOURCE_FORMATS, DEFAULT_STATEMENT_FORMAT } from '../lib/c
 import { useToast } from '../hooks/useToast'
 import { Modal } from './Modal'
 
-const AUTO_OPTION = { id: 'auto', label: 'ตรวจจับอัตโนมัติ' }
-const FORMAT_OPTIONS = [...SOURCE_FORMATS, AUTO_OPTION]
-
 export function ImportModal({ onClose, onImported }) {
   const [format, setFormat] = useState(DEFAULT_STATEMENT_FORMAT)
   const [parsedRows, setParsedRows] = useState(null)
@@ -100,19 +97,21 @@ export function ImportModal({ onClose, onImported }) {
         รายการซ้ำ (นาทีเดียวกันกับรายการที่มีอยู่แล้ว) จะถูกข้ามโดยอัตโนมัติ
       </p>
 
-      <label className="format-select-label" htmlFor="statement-format-select">
-        รูปแบบไฟล์
-      </label>
-      <select
-        id="statement-format-select"
-        className="format-select"
-        value={format}
-        onChange={e => handleFormatChange(e.target.value)}
-      >
-        {FORMAT_OPTIONS.map(f => (
-          <option key={f.id} value={f.id}>{f.label}</option>
-        ))}
-      </select>
+      <div className="format-field">
+        <label className="format-select-label" htmlFor="statement-format-select">
+          รูปแบบไฟล์
+        </label>
+        <select
+          id="statement-format-select"
+          className="format-select"
+          value={format}
+          onChange={e => handleFormatChange(e.target.value)}
+        >
+          {SOURCE_FORMATS.map(f => (
+            <option key={f.id} value={f.id}>{f.label}</option>
+          ))}
+        </select>
+      </div>
 
       <div
         className={`dropzone ${dragActive ? 'dropzone-active' : ''}`}
