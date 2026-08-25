@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { exportToCSV, formatThaiDate } from './utils'
+import { exportToCSV, formatThaiDate, formatThaiDateTime } from './utils'
 import { parseBankCSV } from './csv'
 
 // exportToCSV builds a Blob and drives it through an anchor click rather than
@@ -76,6 +76,16 @@ const baseTx = {
   fx_rate: null,
   statement_format: 'english_v2',
 }
+
+describe('formatThaiDateTime', () => {
+  it('formats with second-level precision as d/m/yyyy(BE) HH:mm:ss', () => {
+    expect(formatThaiDateTime('2026-01-15T09:30:07')).toBe('15/1/2569 09:30:07')
+  })
+
+  it('pads single-digit seconds', () => {
+    expect(formatThaiDateTime('2026-01-15T09:30:05')).toBe('15/1/2569 09:30:05')
+  })
+})
 
 describe('exportToCSV', () => {
   afterEach(() => {
