@@ -55,6 +55,27 @@ BEGIN
       RAISE EXCEPTION 'Unsupported Thai month in effective_date: %', p_value
         USING ERRCODE = '22007';
     END IF;
+  ELSIF v_value ~* '^[0-9]{1,2}-[A-Za-z]{3}-[0-9]{2,4}$' THEN
+    v_match := regexp_match(v_value, '^([0-9]{1,2})-([A-Za-z]{3})-([0-9]{2,4})$');
+    v_day := v_match[1]::integer;
+    v_month_token := lower(v_match[2]);
+    v_buddhist_year := v_match[3]::integer;
+    v_month := CASE v_month_token
+      WHEN 'jan' THEN 1 WHEN 'feb' THEN 2 WHEN 'mar' THEN 3 WHEN 'apr' THEN 4
+      WHEN 'may' THEN 5 WHEN 'jun' THEN 6 WHEN 'jul' THEN 7 WHEN 'aug' THEN 8
+      WHEN 'sep' THEN 9 WHEN 'oct' THEN 10 WHEN 'nov' THEN 11 WHEN 'dec' THEN 12
+      ELSE NULL
+    END;
+
+    IF v_month IS NULL THEN
+      RAISE EXCEPTION 'Unsupported month abbreviation in effective_date: %', p_value
+        USING ERRCODE = '22007';
+    END IF;
+
+    -- This format (english_v2 export) uses a 2-digit Buddhist year.
+    IF length(v_match[3]) = 2 THEN
+      v_buddhist_year := 2500 + v_buddhist_year;
+    END IF;
   ELSE
     RAISE EXCEPTION 'Unsupported effective_date format: %', p_value
       USING ERRCODE = '22007';
