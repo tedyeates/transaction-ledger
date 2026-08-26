@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { ROLES } from '../lib/constants'
 import { formatBaht, formatThaiDateTime, formatThaiDate } from '../lib/utils'
 
-export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, onToggleHighlight, role }) {
+export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, onToggleHighlight, onDeleteClick, role, visibleColumns }) {
   const [highlightInFlight, setHighlightInFlight] = useState(false)
+  const isVisible = key => visibleColumns ? visibleColumns[key] !== false : true
   const handleToggleHighlight = async () => {
     if (!onToggleHighlight || highlightInFlight) return
     setHighlightInFlight(true)
@@ -32,32 +33,54 @@ export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditR
       <td>
         <span className="cell-date">{formatThaiDateTime(tx.tx_datetime)}</span>
       </td>
-      <td><span className="cell-eff">{formatThaiDate(tx['effective_date'])}</span></td>
-      <td>
-        <span className="cell-desc" title={tx['description'] ?? ''}>
-          {tx['description'] ?? '—'}
-        </span>
-      </td>
-      <td><span className="cell-cheque">{tx['cheque_number'] ?? ''}</span></td>
-      <td className={`cell-amt ${tx['withdraw'] ? 'cell-amt-withdraw' : ''}`}>
-        {formatBaht(tx['withdraw'])}
-      </td>
-      <td className={`cell-amt ${tx['deposit'] ? 'cell-amt-deposit' : ''}`}>
-        {formatBaht(tx['deposit'])}
-      </td>
-      {role === ROLES.admin && (
+      {isVisible('effective_date') && (
+        <td><span className="cell-eff">{formatThaiDate(tx['effective_date'])}</span></td>
+      )}
+      {isVisible('description') && (
+        <td>
+          <span className="cell-desc" title={tx['description'] ?? ''}>
+            {tx['description'] ?? '—'}
+          </span>
+        </td>
+      )}
+      {isVisible('cheque_number') && (
+        <td><span className="cell-cheque">{tx['cheque_number'] ?? ''}</span></td>
+      )}
+      {isVisible('withdraw') && (
+        <td className={`cell-amt ${tx['withdraw'] ? 'cell-amt-withdraw' : ''}`}>
+          {formatBaht(tx['withdraw'])}
+        </td>
+      )}
+      {isVisible('deposit') && (
+        <td className={`cell-amt ${tx['deposit'] ? 'cell-amt-deposit' : ''}`}>
+          {formatBaht(tx['deposit'])}
+        </td>
+      )}
+      {role === ROLES.admin && isVisible('balance') && (
         <td className="cell-balance">{formatBaht(tx['balance'])}</td>
       )}
-      <td><span className="cell-channel">{tx['channel'] ?? ''}</span></td>
-      <td><span className="cell-branch">{tx['branch'] ?? ''}</span></td>
-      <td><span className="cell-location">{tx['location'] ?? ''}</span></td>
-      <td><span className="cell-terminal">{tx['terminal_id'] ?? ''}</span></td>
-      <td><span className="cell-narrative">{tx['narrative'] ?? ''}</span></td>
-      <td><span className="cell-counterparty">{tx['counterparty_name'] ?? ''}</span></td>
-      {role === ROLES.admin && (
+      {isVisible('channel') && (
+        <td><span className="cell-channel">{tx['channel'] ?? ''}</span></td>
+      )}
+      {isVisible('branch') && (
+        <td><span className="cell-branch">{tx['branch'] ?? ''}</span></td>
+      )}
+      {isVisible('location') && (
+        <td><span className="cell-location">{tx['location'] ?? ''}</span></td>
+      )}
+      {isVisible('terminal_id') && (
+        <td><span className="cell-terminal">{tx['terminal_id'] ?? ''}</span></td>
+      )}
+      {isVisible('narrative') && (
+        <td><span className="cell-narrative">{tx['narrative'] ?? ''}</span></td>
+      )}
+      {isVisible('counterparty_name') && (
+        <td><span className="cell-counterparty">{tx['counterparty_name'] ?? ''}</span></td>
+      )}
+      {role === ROLES.admin && isVisible('counterparty_account') && (
         <td><span className="cell-counterparty-account">{tx['counterparty_account'] ?? ''}</span></td>
       )}
-      {role === ROLES.admin && (
+      {role === ROLES.admin && isVisible('fx_rate') && (
         <td className="cell-amt">{tx['fx_rate'] != null ? Number(tx['fx_rate']).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''}</td>
       )}
       <td>
@@ -102,6 +125,18 @@ export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditR
             aria-label={tx.is_highlighted ? 'Remove highlight' : 'Add highlight'}
           >
             {tx.is_highlighted ? '★' : '☆'}
+          </button>
+        </td>
+      )}
+      {role === ROLES.admin && (
+        <td className="cell-delete-action">
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={() => onDeleteClick(tx)}
+            title="ลบรายการ"
+            aria-label={`ลบรายการ ${tx['description'] ?? ''}`}
+          >
+            <span aria-hidden="true">🗑</span>
           </button>
         </td>
       )}

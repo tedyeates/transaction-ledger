@@ -1,6 +1,7 @@
 import { ROLES } from '../lib/constants'
+import { ColumnPicker } from './ColumnPicker'
 
-export function Toolbar({ filters, role, onFilterChange, onImportClick, onExportClick, exporting }) {
+export function Toolbar({ filters, role, onFilterChange, onImportClick, onExportClick, exporting, visibleColumns, onVisibleColumnsChange }) {
   const isAccountant = role !== ROLES.admin
 
   return (
@@ -46,6 +47,10 @@ export function Toolbar({ filters, role, onFilterChange, onImportClick, onExport
         title="ถึงวันที่"
         aria-label="ถึงวันที่"
       />
+
+      <div className="toolbar-spacer" />
+
+      <ColumnPicker visibleColumns={visibleColumns} onChange={onVisibleColumnsChange} />
 
       {role === ROLES.admin && (
         <>

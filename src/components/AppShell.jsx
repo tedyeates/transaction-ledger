@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ROLE_LABELS } from '../lib/constants'
+import { getDefaultVisibleColumns } from '../lib/columns'
 import { useTransactions } from '../hooks/useTransactions'
 import { Toolbar } from './Toolbar'
 import { StatsBar } from './StatsBar'
@@ -7,13 +8,34 @@ import { TransactionTable } from './TransactionTable'
 import { ImportModal } from './ImportModal'
 import { EditRayganModal } from './EditRayganModal'
 import { EditRemarkModal } from './EditRemarkModal'
+import { ConfirmDeleteModal } from './ConfirmDeleteModal'
 import { ScrollToTopButton } from './ScrollToTopButton'
+
+const VISIBLE_COLUMNS_STORAGE_KEY = 'ledger.visibleColumns'
+
+function loadVisibleColumns() {
+  const defaults = getDefaultVisibleColumns()
+  try {
+    const stored = JSON.parse(localStorage.getItem(VISIBLE_COLUMNS_STORAGE_KEY))
+    if (stored && typeof stored === 'object') return { ...defaults, ...stored }
+  } catch {
+    // ignore malformed storage, fall back to defaults
+  }
+  return defaults
+}
 
 export function AppShell({ user, role, onLogout }) {
   const [importOpen, setImportOpen]                 = useState(false)
   const [editingTransaction, setEditingTransaction] = useState(null)
   const [editingRemark, setEditingRemark]           = useState(null)
+  const [deletingTransaction, setDeletingTransaction] = useState(null)
   const [exporting, setExporting]                   = useState(false)
+  const [visibleColumns, setVisibleColumns]         = useState(loadVisibleColumns)
+
+  const handleVisibleColumnsChange = next => {
+    setVisibleColumns(next)
+    localStorage.setItem(VISIBLE_COLUMNS_STORAGE_KEY, JSON.stringify(next))
+  }
 
   const {
     isLoading, isFetchingMore, hasMore,
@@ -24,6 +46,7 @@ export function AppShell({ user, role, onLogout }) {
     handleSort, handleFilterChange,
     updateRayganLocally, updateRemarkLocally,
     updateHighlightLocally, toggleHighlight,
+    deleteTransaction,
     exportAllTransactions,
   } = useTransactions(role)
 
@@ -62,6 +85,8 @@ export function AppShell({ user, role, onLogout }) {
         onImportClick={() => setImportOpen(true)}
         onExportClick={handleExport}
         exporting={exporting}
+        visibleColumns={visibleColumns}
+        onVisibleColumnsChange={handleVisibleColumnsChange}
       />
 
       <StatsBar stats={stats} role={role} />
@@ -88,8 +113,10 @@ export function AppShell({ user, role, onLogout }) {
             onEditRaygan={setEditingTransaction}
             onEditRemark={setEditingRemark}
             onToggleHighlight={handleToggleHighlight}
+            onDeleteClick={setDeletingTransaction}
             columnFilters={filters}
             onColumnFilterChange={(key, val) => handleFilterChange({ [key]: val })}
+            visibleColumns={visibleColumns}
           />
         </div>
       </main>
@@ -114,6 +141,14 @@ export function AppShell({ user, role, onLogout }) {
           transaction={editingRemark}
           onClose={() => setEditingRemark(null)}
           onSaved={updateRemarkLocally}
+        />
+      )}
+
+      {deletingTransaction && (
+        <ConfirmDeleteModal
+          transaction={deletingTransaction}
+          onClose={() => setDeletingTransaction(null)}
+          onConfirm={deleteTransaction}
         />
       )}
 

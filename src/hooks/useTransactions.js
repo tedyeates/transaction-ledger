@@ -176,6 +176,36 @@ export function useTransactions(role) {
     }
   }, [updateHighlightLocally, addToast])
 
+  const deleteTransaction = useCallback(async id => {
+    // Optimistic removal — snapshot so we can restore the row (and its
+    // position) on failure rather than just re-fetching.
+    let removedTx = null
+    let removedIndex = -1
+    setTransactions(prev => {
+      const idx = prev.findIndex(tx => tx.id === id)
+      if (idx === -1) return prev
+      removedIndex = idx
+      removedTx = prev[idx]
+      return [...prev.slice(0, idx), ...prev.slice(idx + 1)]
+    })
+    setTotalCount(prev => Math.max(0, prev - 1))
+
+    const { error } = await supabase.rpc('delete_transaction', { tx_id: id })
+
+    if (error) {
+      // Revert on failure — reinsert at original position
+      if (removedTx) {
+        setTransactions(prev => [...prev.slice(0, removedIndex), removedTx, ...prev.slice(removedIndex)])
+        setTotalCount(prev => prev + 1)
+      }
+      addToast(error.message, 'error')
+      return false
+    }
+
+    addToast('ลบรายการเรียบร้อย', 'success')
+    return true
+  }, [addToast])
+
   const exportAllTransactions = useCallback(async () => {
     const EXPORT_CHUNK = 1000
     let allRows = []
@@ -214,6 +244,7 @@ export function useTransactions(role) {
     handleSort, handleFilterChange,
     updateRayganLocally, updateRemarkLocally,
     updateHighlightLocally, toggleHighlight,
+    deleteTransaction,
     exportAllTransactions,
   }
 }

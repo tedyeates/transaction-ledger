@@ -134,8 +134,19 @@ body {
 .btn-ghost:hover:not(:disabled)   { background: var(--rule); }
 .btn-accent             { background: var(--accent); color: white; }
 .btn-accent:hover:not(:disabled)  { opacity: 0.88; }
+.btn-danger             { background: var(--withdraw); color: white; }
+.btn-danger:hover:not(:disabled)  { background: #6E1414; }
 .btn-sm   { padding: 0.35rem 0.75rem; font-size: 0.68rem; }
 .btn-full { width: 100%; justify-content: center; }
+
+/* Delete action column: extra left border + padding visually isolates the
+   destructive control from adjacent edit/highlight buttons (SSW destructive
+   button UX rule — separation from other clickable elements). */
+.col-delete-action,
+.cell-delete-action {
+  border-left: 1px solid var(--rule);
+  padding-left: 0.9rem !important;
+}
 
 /* ── Alert / error ─────────────────────────────────────────── */
 .error-msg {
@@ -233,6 +244,69 @@ body {
   cursor: pointer;
 }
 .filter-select:disabled { opacity: 0.6; cursor: not-allowed; }
+.toolbar-spacer { flex: 1 1 auto; }
+
+.column-picker { position: relative; display: flex; align-items: center; gap: 0.3rem; }
+.column-picker-trigger {
+  white-space: nowrap;
+}
+.column-picker-clear {
+  border: 1px solid var(--rule);
+  background: white;
+  color: var(--muted);
+  width: 1.9rem;
+  height: 1.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.column-picker-clear:hover { color: var(--ink); border-color: var(--ink); }
+.column-picker-menu {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  z-index: 20;
+  background: white;
+  border: 1px solid var(--rule);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  padding: 0.5rem 0;
+  min-width: 200px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.column-picker-reset {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 0.4rem 0.9rem;
+  margin-bottom: 0.25rem;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  color: var(--accent);
+  cursor: pointer;
+}
+.column-picker-reset:hover:not(:disabled) { background: var(--ledger); }
+.column-picker-reset:disabled { color: var(--muted); cursor: not-allowed; }
+.column-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.9rem;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.column-picker-option:hover { background: var(--ledger); }
+.column-picker-option input { cursor: pointer; }
 
 /* ── Stats bar ─────────────────────────────────────────────── */
 .stats-bar {

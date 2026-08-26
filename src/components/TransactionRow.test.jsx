@@ -35,6 +35,7 @@ function renderRow(props = {}) {
     onEditRaygan: vi.fn(),
     onEditRemark: vi.fn(),
     onToggleHighlight: vi.fn(),
+    onDeleteClick: vi.fn(),
     role: ROLES.admin,
   }
   const merged = { ...defaults, ...props }
@@ -216,4 +217,52 @@ describe('TransactionRow admin-only operational metadata (fx_rate)', () => {
       expect(tr.textContent).not.toContain('33.50')
     }
   )
+})
+
+describe('TransactionRow delete action (admin-only, isolated, confirmable)', () => {
+  it('shows a delete button for admin role', () => {
+    renderRow({ role: ROLES.admin })
+    expect(screen.getByRole('button', { name: /ลบรายการ/ })).toBeTruthy()
+  })
+
+  it.each([ROLES.withdraw, ROLES.deposit])(
+    'hides the delete button for %s role',
+    (role) => {
+      renderRow({ role })
+      expect(screen.queryByRole('button', { name: /ลบรายการ/ })).toBeNull()
+    }
+  )
+
+  it('uses the btn-danger class for the delete button', () => {
+    renderRow({ role: ROLES.admin })
+    const btn = screen.getByRole('button', { name: /ลบรายการ/ })
+    expect(btn.classList.contains('btn-danger')).toBe(true)
+  })
+
+  it('has an aria-label naming the transaction being deleted', () => {
+    const tr = renderRow({ role: ROLES.admin, txOverrides: { description: 'ค่าน้ำค่าไฟ' } })
+    const btn = tr.querySelector('.btn-danger')
+    expect(btn.getAttribute('aria-label')).toContain('ค่าน้ำค่าไฟ')
+  })
+
+  it('calls onDeleteClick with the transaction when clicked, without opening other modals', () => {
+    const onDeleteClick = vi.fn()
+    const onEditRemark = vi.fn()
+    const tr = renderRow({ role: ROLES.admin, onDeleteClick, onEditRemark })
+    tr.querySelector('.btn-danger').click()
+    expect(onDeleteClick).toHaveBeenCalledTimes(1)
+    expect(onDeleteClick.mock.calls[0][0].id).toBe(1)
+    expect(onEditRemark).not.toHaveBeenCalled()
+  })
+
+  it('places the delete action in its own isolated cell, separate from the highlight toggle', () => {
+    const tr = renderRow({ role: ROLES.admin })
+    const deleteCell = tr.querySelector('.cell-delete-action')
+    const highlightCell = tr.querySelector('.cell-highlight-toggle')
+    expect(deleteCell).not.toBeNull()
+    expect(highlightCell).not.toBeNull()
+    // Delete cell must be its own <td>, not sharing a cell with the highlight toggle.
+    expect(deleteCell).not.toBe(highlightCell)
+    expect(deleteCell.contains(highlightCell)).toBe(false)
+  })
 })

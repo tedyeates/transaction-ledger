@@ -5,10 +5,11 @@ import { TransactionRow } from './TransactionRow'
 
 export function TransactionTable({
   transactions, totalCount, isLoading, isFetchingMore, hasMore,
-  sort, role, onSort, onLoadMore, onEditRaygan, onEditRemark, onToggleHighlight,
-  columnFilters, onColumnFilterChange,
+  sort, role, onSort, onLoadMore, onEditRaygan, onEditRemark, onToggleHighlight, onDeleteClick,
+  columnFilters, onColumnFilterChange, visibleColumns,
 }) {
   const canEdit = role !== ROLES.admin
+  const isVisible = key => visibleColumns ? visibleColumns[key] !== false : true
 
   const columns = [
     { key: 'tx_datetime',   label: 'วันที่ทำรายการ' },
@@ -29,7 +30,8 @@ export function TransactionTable({
     { key: 'memo',          label: canEdit ? 'รายการ ✏' : 'รายการ', filterKey: 'colMemo', numeric: false },
     ...(role === ROLES.admin ? [{ key: 'remark', label: 'หมายเหตุ ✏', filterKey: 'colRemark', numeric: false }] : []),
     ...(role === ROLES.admin ? [{ key: 'highlight', label: '★', className: 'col-highlight' }] : []),
-  ]
+    ...(role === ROLES.admin ? [{ key: 'delete', label: '', className: 'col-delete-action' }] : []),
+  ].filter(col => isVisible(col.key))
 
   return (
     <>
@@ -72,7 +74,9 @@ export function TransactionTable({
                   onEditRaygan={onEditRaygan}
                   onEditRemark={onEditRemark}
                   onToggleHighlight={onToggleHighlight}
+                  onDeleteClick={onDeleteClick}
                   role={role}
+                  visibleColumns={visibleColumns}
                 />
               ))
             )}
