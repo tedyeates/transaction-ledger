@@ -3,7 +3,7 @@
 
 BEGIN;
 
-SELECT plan(73);
+SELECT plan(75);
 
 -- =============================================================================
 -- HELPERS: Simulate authenticated users via JWT claims
@@ -766,7 +766,31 @@ SELECT ok(
   'import_transactions: v2 Gregorian effective_date imports without raising'
 );
 
+-- Regression (#31): rows sharing an identical tx_datetime must be inserted
+-- (and therefore receive ids) in the same order they appeared in the
+-- incoming JSON array, since the UI tiebreaks same-timestamp rows by
+-- id ASC. Three CHEQUE AUTOPOST-style rows at one second, distinguished by
+-- cheque_number, must come back out in input order when queried id ASC.
+SELECT ok(
+  (SELECT (public.import_transactions(
+    '[
+       {"tx_datetime":"2099-07-01T21:07:00Z","effective_date":"2099-07-01","description":"CHEQUE AUTOPOST (Sys.Gen)","cheque_number":"CHQ-001","withdraw":10,"deposit":null,"balance":990,"channel":"TEST","type":"withdrawal"},
+       {"tx_datetime":"2099-07-01T21:07:00Z","effective_date":"2099-07-01","description":"CHEQUE AUTOPOST (Sys.Gen)","cheque_number":"CHQ-002","withdraw":20,"deposit":null,"balance":970,"channel":"TEST","type":"withdrawal"},
+       {"tx_datetime":"2099-07-01T21:07:00Z","effective_date":"2099-07-01","description":"CHEQUE AUTOPOST (Sys.Gen)","cheque_number":"CHQ-003","withdraw":30,"deposit":null,"balance":940,"channel":"TEST","type":"withdrawal"}
+     ]'::jsonb
+  ))->>'inserted' = '3'),
+  'import_transactions: ordinality regression - all three same-second rows insert'
+);
+
 SELECT tests.clear_auth();
+
+SELECT is(
+  (SELECT array_agg(cheque_number ORDER BY id ASC)
+   FROM public.transactions
+   WHERE tx_datetime = '2099-07-01T21:07:00Z'::timestamptz),
+  ARRAY['CHQ-001', 'CHQ-002', 'CHQ-003'],
+  'import_transactions: same-timestamp rows retain input order when queried id ASC'
+);
 
 SELECT is(
   (SELECT effective_date FROM public.transactions WHERE description = 'v2 gregorian effective_date'),
