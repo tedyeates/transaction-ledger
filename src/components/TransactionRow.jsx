@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ROLES } from '../lib/constants'
 import { formatBaht, formatThaiDateTime, formatThaiDate } from '../lib/utils'
 
-export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, onToggleHighlight, role }) {
+export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditRemark, onToggleHighlight, onDeleteClick, role }) {
   const [highlightInFlight, setHighlightInFlight] = useState(false)
   const handleToggleHighlight = async () => {
     if (!onToggleHighlight || highlightInFlight) return
@@ -102,6 +102,18 @@ export function TransactionRow({ transaction: tx, canEdit, onEditRaygan, onEditR
             aria-label={tx.is_highlighted ? 'Remove highlight' : 'Add highlight'}
           >
             {tx.is_highlighted ? '★' : '☆'}
+          </button>
+        </td>
+      )}
+      {role === ROLES.admin && (
+        <td className="cell-delete-action">
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={() => onDeleteClick(tx)}
+            title="ลบรายการ"
+            aria-label={`ลบรายการ ${tx['description'] ?? ''}`}
+          >
+            <span aria-hidden="true">🗑</span>
           </button>
         </td>
       )}

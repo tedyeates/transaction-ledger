@@ -7,12 +7,14 @@ import { TransactionTable } from './TransactionTable'
 import { ImportModal } from './ImportModal'
 import { EditRayganModal } from './EditRayganModal'
 import { EditRemarkModal } from './EditRemarkModal'
+import { ConfirmDeleteModal } from './ConfirmDeleteModal'
 import { ScrollToTopButton } from './ScrollToTopButton'
 
 export function AppShell({ user, role, onLogout }) {
   const [importOpen, setImportOpen]                 = useState(false)
   const [editingTransaction, setEditingTransaction] = useState(null)
   const [editingRemark, setEditingRemark]           = useState(null)
+  const [deletingTransaction, setDeletingTransaction] = useState(null)
   const [exporting, setExporting]                   = useState(false)
 
   const {
@@ -24,6 +26,7 @@ export function AppShell({ user, role, onLogout }) {
     handleSort, handleFilterChange,
     updateRayganLocally, updateRemarkLocally,
     updateHighlightLocally, toggleHighlight,
+    deleteTransaction,
     exportAllTransactions,
   } = useTransactions(role)
 
@@ -88,6 +91,7 @@ export function AppShell({ user, role, onLogout }) {
             onEditRaygan={setEditingTransaction}
             onEditRemark={setEditingRemark}
             onToggleHighlight={handleToggleHighlight}
+            onDeleteClick={setDeletingTransaction}
             columnFilters={filters}
             onColumnFilterChange={(key, val) => handleFilterChange({ [key]: val })}
           />
@@ -114,6 +118,14 @@ export function AppShell({ user, role, onLogout }) {
           transaction={editingRemark}
           onClose={() => setEditingRemark(null)}
           onSaved={updateRemarkLocally}
+        />
+      )}
+
+      {deletingTransaction && (
+        <ConfirmDeleteModal
+          transaction={deletingTransaction}
+          onClose={() => setDeletingTransaction(null)}
+          onConfirm={deleteTransaction}
         />
       )}
 

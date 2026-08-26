@@ -134,8 +134,19 @@ body {
 .btn-ghost:hover:not(:disabled)   { background: var(--rule); }
 .btn-accent             { background: var(--accent); color: white; }
 .btn-accent:hover:not(:disabled)  { opacity: 0.88; }
+.btn-danger             { background: var(--withdraw); color: white; }
+.btn-danger:hover:not(:disabled)  { background: #6E1414; }
 .btn-sm   { padding: 0.35rem 0.75rem; font-size: 0.68rem; }
 .btn-full { width: 100%; justify-content: center; }
+
+/* Delete action column: extra left border + padding visually isolates the
+   destructive control from adjacent edit/highlight buttons (SSW destructive
+   button UX rule — separation from other clickable elements). */
+.col-delete-action,
+.cell-delete-action {
+  border-left: 1px solid var(--rule);
+  padding-left: 0.9rem !important;
+}
 
 /* ── Alert / error ─────────────────────────────────────────── */
 .error-msg {

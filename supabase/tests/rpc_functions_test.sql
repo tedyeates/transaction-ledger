@@ -3,7 +3,7 @@
 
 BEGIN;
 
-SELECT plan(67);
+SELECT plan(73);
 
 -- =============================================================================
 -- HELPERS: Simulate authenticated users via JWT claims
@@ -458,6 +458,11 @@ SELECT ok(
   'anon has no EXECUTE on update_remark'
 );
 
+SELECT ok(
+  NOT has_function_privilege('anon', 'public.delete_transaction(bigint)', 'EXECUTE'),
+  'anon has no EXECUTE on delete_transaction'
+);
+
 -- =============================================================================
 -- TEST: get_latest_balance
 -- =============================================================================
@@ -597,6 +602,67 @@ SELECT throws_ok(
   format('SELECT public.toggle_highlight(ARRAY[%s]::bigint[], false)', current_setting('tests.withdrawal_tx_id')),
   'Permission denied',
   'toggle_highlight: withdrawal user denied'
+);
+
+-- =============================================================================
+-- TEST: delete_transaction (admin-only destructive action)
+-- =============================================================================
+
+-- Insert a disposable row (not seed data) so this block doesn't remove rows
+-- other tests in this file depend on.
+SELECT tests.clear_auth();
+
+DO $$
+DECLARE
+  v_id bigint;
+BEGIN
+  INSERT INTO public.transactions
+    (tx_datetime, effective_date, description, withdraw, deposit, balance, channel, type)
+  VALUES
+    ('2099-06-01T00:00:00Z', '2099-06-01', 'delete_transaction test row', 1, NULL, 999, 'TEST', 'withdrawal')
+  RETURNING id INTO v_id;
+
+  PERFORM set_config('tests.deletable_tx_id', v_id::text, false);
+END;
+$$;
+
+-- Non-admin denied, row still present
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000002'::uuid);
+
+SELECT throws_ok(
+  format('SELECT public.delete_transaction(%s)', current_setting('tests.deletable_tx_id')),
+  'Permission denied',
+  'delete_transaction: withdrawal user denied'
+);
+
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000003'::uuid);
+
+SELECT throws_ok(
+  format('SELECT public.delete_transaction(%s)', current_setting('tests.deletable_tx_id')),
+  'Permission denied',
+  'delete_transaction: income user denied'
+);
+
+SELECT tests.clear_auth();
+
+SELECT ok(
+  (SELECT count(*) FROM public.transactions WHERE id = current_setting('tests.deletable_tx_id')::bigint) = 1,
+  'delete_transaction: row survives denied attempts'
+);
+
+-- Admin can delete
+SELECT tests.authenticate_as('aaaaaaaa-0000-0000-0000-000000000001'::uuid);
+
+SELECT lives_ok(
+  format('SELECT public.delete_transaction(%s)', current_setting('tests.deletable_tx_id')),
+  'delete_transaction: admin can delete'
+);
+
+SELECT tests.clear_auth();
+
+SELECT ok(
+  (SELECT count(*) FROM public.transactions WHERE id = current_setting('tests.deletable_tx_id')::bigint) = 0,
+  'delete_transaction: row is gone after admin delete'
 );
 
 -- =============================================================================
